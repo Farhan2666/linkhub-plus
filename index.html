@@ -710,6 +710,8 @@
           +'<div class="cz-field"><label>URL</label><input type="url" value="'+esc(s.url)+'" oninput="updateSocial('+i+',\'url\',this.value)" /></div></div>'
       }).join('')
 
+      var existing = document.getElementById('customizer')
+      if (existing) existing.remove()
       var panel = document.createElement('div')
       panel.id = 'customizer'
       panel.innerHTML =
@@ -762,7 +764,7 @@
       if (!file) return
       if (file.size > 2097152) { alert('Image too large. Max 2MB.'); return }
       var reader = new FileReader()
-      reader.onload = function(e) { dashData.profile.avatar = e.target.result; saveDashData(); renderCustomizerPage(dashData) }
+      reader.onload = function(e) { dashData.profile.avatar = e.target.result; saveDashData(); refreshCustomizer() }
       reader.readAsDataURL(file)
       input.value = ''
     }
@@ -776,11 +778,15 @@
     window.removeLink = function(btn) {
       var id = btn.getAttribute('data-link-id')
       dashData.links = dashData.links.filter(function(l) { return l.id !== id })
-      saveDashData(); renderCustomizerPage(dashData)
+      saveDashData(); refreshCustomizer()
     }
     window.addLink = function() {
       dashData.links.push({id:crypto.randomUUID(),title:'New Project',url:'https://',icon:'\uD83D\uDD17',description:'',category:'',color:''})
-      saveDashData(); renderCustomizerPage(dashData)
+      saveDashData(); refreshCustomizer()
+    }
+    function refreshCustomizer() {
+      renderCustomizerPage(dashData)
+      openDashCustomizer()
     }
     window.updateSocial = function(idx, field, val) {
       if (dashData.socials[idx]) { dashData.socials[idx][field] = val; saveDashData(); renderCustomizerPage(dashData) }
@@ -809,7 +815,7 @@
       if (fi === -1 || ti === -1) return
       var item = dashData.links.splice(fi, 1)[0]
       dashData.links.splice(ti, 0, item)
-      dragSrcId = null; saveDashData(); renderCustomizerPage(dashData)
+      dragSrcId = null; saveDashData(); refreshCustomizer()
     }
     window.onDragEnd = function() {
       document.querySelectorAll('.cz-link-item').forEach(function(el) { el.classList.remove('dragging','drag-over') })
