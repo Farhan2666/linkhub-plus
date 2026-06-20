@@ -205,14 +205,22 @@
   </style>
 </head>
 <body>
-  <div id="root"></div>
+  <div id="root"><div style="padding:20px;text-align:center;color:var(--text-secondary);font-family:sans-serif">Loading...</div></div>
 
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js" onerror="document.getElementById('root').innerHTML='<div style=\'padding:40px;color:#f87171;text-align:center;font-family:sans-serif\'><h2>Failed to load</h2><p style=\'margin-top:12px;font-size:14px\'>CDN blocked. Try disabling ad blocker or use a different browser.</p></div>'"></script>
   <script>
     // ========== Config ==========
     const SUPABASE_URL = 'https://rnbfzfwkxxdpixhvilnx.supabase.co'
     const SUPABASE_ANON_KEY = 'sb_publishable_FiSWuZYttL-vyXLqz5B99g_EVT-qxP_'
-    const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
+
+    let supabase
+    try {
+      if (typeof window.supabase === 'undefined') throw new Error('Supabase SDK failed to load. Try disabling ad blocker or check your connection.')
+      supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
+    } catch(e) {
+      document.getElementById('root').innerHTML = '<div style="padding:40px;color:#f87171;text-align:center;font-family:sans-serif"><h2>Connection Error</h2><p style="margin-top:12px;font-size:14px">'+e.message.replace(/</g,'&lt;')+'</p><p style="margin-top:8px;font-size:12px;color:var(--text-secondary)">Try: disable ad blocker, use Chrome/Firefox, or check internet</p></div>'
+      throw e
+    }
 
     // ========== App State ==========
     let currentUser = null
@@ -232,8 +240,6 @@
     function showFatal(msg) {
       document.getElementById('root').innerHTML = '<div style="padding:40px;color:#f87171;text-align:center;font-family:sans-serif"><h2>Something went wrong</h2><p style="margin-top:12px;font-size:14px">'+esc(msg)+'</p></div>'
     }
-
-    document.getElementById('root').innerHTML = '<div style="padding:20px;text-align:center;color:var(--text-secondary)">Loading...</div>'
 
     async function route() {
       try {
