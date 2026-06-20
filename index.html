@@ -234,6 +234,8 @@
       document.getElementById('root').innerHTML = '<div style="padding:40px;color:#f87171;text-align:center;font-family:sans-serif"><h2>Something went wrong</h2><p style="margin-top:12px;font-size:14px">'+esc(msg)+'</p></div>'
     }
 
+    document.getElementById('root').innerHTML = '<div style="padding:20px;text-align:center;color:var(--text-secondary)">Loading...</div>'
+
     async function route() {
       try {
         const hash = getHash()
@@ -308,8 +310,10 @@
 
       document.getElementById('auth-submit').onclick = async () => {
         try {
-          const email = document.getElementById('auth-email').value
-          const pass = document.getElementById('auth-password').value
+          const btn = document.getElementById('auth-submit')
+          if (!btn) { document.getElementById('auth-error').textContent = 'Button not found!'; return }
+          const email = document.getElementById('auth-email')?.value || ''
+          const pass = document.getElementById('auth-password')?.value || ''
           const errEl = document.getElementById('auth-error')
           errEl.textContent = ''
           if (!email || !pass) { errEl.textContent = 'Fill in all fields'; return }
