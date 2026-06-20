@@ -301,9 +301,8 @@
             id: data.user.id, username: username,
             page_data: getDefaultData()
           })
-          if (profErr) { errEl.textContent = profErr.message; return }
-          document.getElementById('auth-success').textContent = 'Account created! Check your email to confirm.'
-          document.getElementById('auth-submit').textContent = 'Done'
+          if (profErr) { errEl.textContent = profErr.message; document.getElementById('auth-submit').disabled = false; document.getElementById('auth-submit').textContent = 'Create Account'; return }
+          navigate('/dashboard')
         } else {
           document.getElementById('auth-submit').disabled = true
           document.getElementById('auth-submit').textContent = 'Signing in...'
