@@ -207,19 +207,36 @@
 <body>
   <div id="root"><div style="padding:20px;text-align:center;color:var(--text-secondary);font-family:sans-serif">Loading...</div></div>
 
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js" onerror="document.getElementById('root').innerHTML='<div style=\'padding:40px;color:#f87171;text-align:center;font-family:sans-serif\'><h2>Failed to load</h2><p style=\'margin-top:12px;font-size:14px\'>CDN blocked. Try disabling ad blocker or use a different browser.</p></div>'"></script>
   <script>
     // ========== Config ==========
     const SUPABASE_URL = 'https://rnbfzfwkxxdpixhvilnx.supabase.co'
     const SUPABASE_ANON_KEY = 'sb_publishable_FiSWuZYttL-vyXLqz5B99g_EVT-qxP_'
 
-    let supabase
-    try {
-      if (typeof window.supabase === 'undefined') throw new Error('Supabase SDK failed to load. Try disabling ad blocker or check your connection.')
-      supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
-    } catch(e) {
-      document.getElementById('root').innerHTML = '<div style="padding:40px;color:#f87171;text-align:center;font-family:sans-serif"><h2>Connection Error</h2><p style="margin-top:12px;font-size:14px">'+e.message.replace(/</g,'&lt;')+'</p><p style="margin-top:8px;font-size:12px;color:var(--text-secondary)">Try: disable ad blocker, use Chrome/Firefox, or check internet</p></div>'
+    let supabase = null
+    let CDNLoaded = false
+
+    function loadCDN() {
+      return new Promise(function(resolve, reject) {
+        var s = document.createElement('script')
+        s.src = 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js'
+        s.onload = function() { CDNLoaded = true; resolve() }
+        s.onerror = function() { reject(new Error('CDN failed to load')) }
+        document.head.appendChild(s)
+      })
     }
+
+    // Load CDN with 10s timeout — page stays interactive while loading
+    Promise.race([
+      loadCDN(),
+      new Promise(function(_, reject) {
+        setTimeout(function() { reject(new Error('CDN timeout (10s)')) }, 10000)
+      })
+    ]).then(function() {
+      supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
+      bootApp()
+    }).catch(function(err) {
+      document.getElementById('root').innerHTML = '<div style="padding:40px;color:#f87171;text-align:center;font-family:sans-serif"><h2>Connection Error</h2><p style="margin-top:12px;font-size:14px">'+err.message.replace(/</g,'&lt;')+'</p><p style="margin-top:8px;font-size:12px;color:var(--text-secondary)">Try refreshing, disable ad blocker, or use Chrome/Firefox</p></div>'
+    })
 
     // ========== App State ==========
     let currentUser = null
@@ -231,7 +248,7 @@
       window.location.hash = hash
     }
 
-    window.addEventListener('hashchange', route)
+    window.addEventListener('hashchange', function() { if (supabase) route() })
     window.route = navigate
 
     function getHash() { return window.location.hash.slice(1) || '/login' }
@@ -250,7 +267,6 @@
     }
 
     async function route() {
-      if (!supabase) { document.getElementById('root').innerHTML = '<div style="padding:40px;color:#f87171;text-align:center;font-family:sans-serif"><h2>Connection Error</h2><p style="margin-top:12px;font-size:14px">Supabase SDK failed to initialize</p></div>'; return }
       try {
         const hash = getHash()
         currentRoute = hash
@@ -858,8 +874,8 @@
       if (dashData && dashData.theme.bgType === 'particle') initParticles(dashData.theme)
     })
 
-    // ========== Init ==========
-    route()
+    // ========== Boot ==========
+    function bootApp() { route() }
   </script>
 </body>
 </html>
