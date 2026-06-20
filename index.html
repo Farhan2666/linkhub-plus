@@ -748,7 +748,7 @@
           ?'<div class="cz-field"><label>Image URL</label><input type="url" value="'+esc(d.theme.bgImage||'')+'" oninput="updateTheme(\'bgImage\',this.value)" placeholder="https://example.com/image.jpg" /></div>':'')
         +(d.theme.bgType==='pattern'
           ?'<div class="cz-field"><label>Pattern</label><div class="cz-bg-type-row">'
-          +['diagonal','dots','grid'].map(function(p){return '<button class="cz-bg-type-btn'+(d.theme.patternType===p?' active':'')+'" onclick="updateTheme(\'patternType\',\''+p+'\')">'+p.charAt(0).toUpperCase()+p.slice(1)+'</button>'}).join('')
+          +['diagonal','dots','grid'].map(function(p){return '<button class="cz-bg-type-btn'+(d.theme.patternType===p?' active':'')+'" onclick="updatePatternType(\''+p+'\')">'+p.charAt(0).toUpperCase()+p.slice(1)+'</button>'}).join('')
           +'</div></div>'
           +'<div class="cz-field"><label>Pattern Color</label><div class="cz-row"><input type="color" value="'+(d.theme.patternColor||'#ffffff')+'" oninput="updateTheme(\'patternColor\',this.value)" /><input type="text" value="'+(d.theme.patternColor||'#ffffff')+'" oninput="updateTheme(\'patternColor\',this.value)" style="font-family:monospace;font-size:12px;flex:1" /></div></div>':'')
         +'<div class="cz-field"><label>Card Opacity: '+Math.round(d.theme.cardOpacity*100)+'%</label><input type="range" min="0" max="20" value="'+Math.round(d.theme.cardOpacity*100)+'" oninput="updateTheme(\'cardOpacity\',Number(this.value)/100)" /></div>'
@@ -781,7 +781,8 @@
     }
     window.updateProfile = function(field, val) { dashData.profile[field] = val; saveDashData(); renderCustomizerPage(dashData) }
     window.updateTheme = function(field, val) { dashData.theme[field] = val; saveDashData(); renderCustomizerPage(dashData) }
-    window.updateBgType = function(t) { dashData.theme.bgType = t; saveDashData(); renderCustomizerPage(dashData) }
+    window.updateBgType = function(t) { dashData.theme.bgType = t; saveDashData(); refreshCustomizer() }
+    window.updatePatternType = function(t) { dashData.theme.patternType = t; saveDashData(); refreshCustomizer() }
     window.updateLink = function(id, field, val) {
       var l = dashData.links.find(function(l) { return l.id === id })
       if (l) { l[field] = val; saveDashData(); renderCustomizerPage(dashData) }
@@ -953,15 +954,19 @@
       root.style.setProperty('--card-opacity', String(t.cardOpacity))
       root.style.setProperty('--card-blur', t.cardBlur + 'px')
       root.style.setProperty('--glow-intensity', String(t.glowIntensity))
+      if (t.bgType === 'particle') {
+        document.body.style.background = t.solidColor
+        var o = document.getElementById('bg-overlay')
+        if (o && o.parentNode) o.parentNode.removeChild(o)
+        return
+      }
       var bg = getBgStyle(t)
       var overlay = document.getElementById('bg-overlay')
       if (!overlay) {
         overlay = document.createElement('div')
         overlay.id = 'bg-overlay'
         overlay.style.cssText = 'position:fixed;inset:0;z-index:0;pointer-events:none;transition:background .5s'
-        var canv = document.getElementById('canvas-bg')
-        if (canv) document.body.insertBefore(overlay, canv)
-        else document.body.prepend(overlay)
+        document.body.prepend(overlay)
       }
       overlay.style.background = bg
       if (t.bgType === 'pattern' && (t.patternType === 'dots' || t.patternType === 'grid')) overlay.style.backgroundSize = '20px 20px'
