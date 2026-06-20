@@ -223,6 +223,7 @@
         if (tok) headers['Authorization'] = 'Bearer ' + tok
       }
       return fetch(SUPABASE_URL + path, { headers: headers, ...(opts||{}) }).then(function(r) {
+        if (r.status === 204) return null
         return r.json().then(function(d) {
           if (r.status >= 400) throw new Error(d.msg || d.message || d.error_description || d.error || 'HTTP ' + r.status)
           return d
@@ -294,8 +295,6 @@
         }
       }
     }
-
-    bootApp()
 
     // ========== App State ==========
     let currentUser = null
@@ -935,6 +934,7 @@
 
     // ========== Boot ==========
     function bootApp() { route() }
+    bootApp()
   </script>
 </body>
 </html>
