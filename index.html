@@ -1,0 +1,741 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>LinkHub+</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,400;14..32,500;14..32,600;14..32,700&display=swap" rel="stylesheet" />
+  <style>
+    *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+    :root {
+      --bg-primary: #0a0014; --bg-card: rgba(255,255,255,0.06);
+      --text-primary: #ffffff; --text-secondary: rgba(255,255,255,0.6);
+      --accent-1: #5D34D0; --accent-2: #FF006E; --accent-3: #00F0FF;
+      --border-color: rgba(255,255,255,0.08); --glow-color: #FF006E;
+      --card-opacity: 0.06; --card-blur: 12px; --glow-intensity: 1;
+    }
+    html { scroll-behavior: smooth; }
+    body {
+      font-family: "Inter", ui-sans-serif, system-ui, sans-serif;
+      background: var(--bg-primary); color: var(--text-primary);
+      min-height: 100vh; overflow-x: hidden; -webkit-font-smoothing: antialiased;
+    }
+    ::-webkit-scrollbar { width: 4px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.15); border-radius: 2px; }
+    a { color: inherit; text-decoration: none; }
+
+    @keyframes float { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-8px)} }
+    @keyframes slideIn { from{opacity:0;transform:translateY(20px)} to{opacity:1;transform:translateY(0)} }
+    @keyframes fadeIn { from{opacity:0} to{opacity:1} }
+    .animate-float { animation: float 3s ease-in-out infinite; }
+    .animate-slide-in { animation: slideIn 0.5s ease-out both; }
+
+    #bg-overlay { position:fixed;inset:0;z-index:0;pointer-events:none;transition:background .5s; }
+    #canvas-bg { position:fixed;inset:0;z-index:0;pointer-events:none; }
+    #app { position:relative;z-index:1;min-height:100vh; }
+
+    /* === Auth Pages === */
+    .auth-page { display:flex;align-items:center;justify-content:center;min-height:100vh;padding:24px; }
+    .auth-card {
+      width:100%;max-width:400px;padding:40px 32px;border-radius:24px;
+      background:rgba(255,255,255,0.03);border:1px solid var(--border-color);
+      backdrop-filter:blur(16px);
+    }
+    .auth-card h1 { font-size:24px;font-weight:700;margin-bottom:4px; }
+    .auth-card p { font-size:14px;color:var(--text-secondary);margin-bottom:28px; }
+    .auth-input {
+      width:100%;padding:12px 16px;border-radius:12px;margin-bottom:14px;
+      background:rgba(255,255,255,0.04);border:1px solid var(--border-color);
+      color:white;font-size:14px;font-family:inherit;outline:none;transition:border-color .2s;
+    }
+    .auth-input:focus { border-color:var(--accent-3); }
+    .auth-btn {
+      width:100%;padding:12px;border-radius:12px;border:none;
+      font-size:14px;font-weight:600;color:white;cursor:pointer;transition:opacity .2s;
+    }
+    .auth-btn:hover { opacity:.85; }
+    .auth-link { display:block;text-align:center;margin-top:16px;font-size:13px;color:var(--text-secondary); }
+    .auth-link a { color:var(--accent-3);cursor:pointer; }
+    .auth-link a:hover { opacity:.7; }
+    .auth-error { font-size:12px;color:#f87171;margin-bottom:12px;min-height:18px; }
+    .auth-success { font-size:12px;color:#34d399;margin-bottom:12px;min-height:18px; }
+    .auth-username-row { display:flex;gap:8px;align-items:center; }
+    .auth-username-row span { color:var(--text-secondary);font-size:14px;white-space:nowrap; }
+    .auth-username-row input { flex:1; }
+
+    /* === Dashboard === */
+    .dash-header {
+      position:sticky;top:0;z-index:30;
+      display:flex;align-items:center;justify-content:space-between;
+      padding:12px 20px;backdrop-filter:blur(12px);
+      background:rgba(10,0,20,0.8);border-bottom:1px solid var(--border-color);
+    }
+    .dash-header h2 { font-size:16px;font-weight:600; }
+    .dash-header-right { display:flex;align-items:center;gap:12px; }
+    .dash-username { font-size:12px;color:var(--text-secondary); }
+    .dash-btn {
+      padding:7px 16px;border-radius:10px;font-size:12px;font-weight:500;
+      background:rgba(255,255,255,0.06);border:1px solid var(--border-color);
+      color:var(--text-primary);cursor:pointer;transition:all .2s;
+    }
+    .dash-btn:hover { background:rgba(255,255,255,0.1); }
+    .dash-btn-primary {
+      background:linear-gradient(135deg,var(--accent-1),var(--accent-2));border:none;
+    }
+    .dash-btn-danger { color:#f87171; }
+    .dash-content { max-width:600px;margin:0 auto;padding:24px 16px; }
+
+    /* === Public Profile === */
+    .profile-section {
+      display:flex;flex-direction:column;align-items:center;text-align:center;
+      padding:64px 24px 32px;
+    }
+    .avatar-ring {
+      width:112px;height:112px;border-radius:50%;margin-bottom:24px;
+      display:flex;align-items:center;justify-content:center;
+      font-size:36px;font-weight:700;overflow:hidden;
+      border:2px solid var(--accent-3);
+      box-shadow:0 0 20px color-mix(in srgb,var(--glow-color) 25%,transparent);
+      position:relative;
+    }
+    .avatar-ring img { width:100%;height:100%;object-fit:cover; }
+    .profile-name { font-size:22px;font-weight:600;letter-spacing:-.02em;margin-bottom:6px; }
+    .profile-bio { font-size:14px;color:var(--text-secondary);margin-bottom:12px; }
+    .profile-status {
+      display:inline-flex;align-items:center;gap:6px;padding:4px 12px;border-radius:999px;
+      font-size:12px;font-weight:500;background:rgba(255,255,255,0.06);
+      border:1px solid rgba(255,255,255,0.08);backdrop-filter:blur(8px);
+    }
+    .links-section { padding:0 24px 24px;max-width:480px;margin:0 auto;width:100%; }
+    .links-header {
+      display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;
+    }
+    .links-header h2 {
+      font-size:11px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:var(--text-secondary);
+    }
+    .link-card {
+      display:flex;align-items:center;gap:16px;padding:16px 20px;border-radius:16px;margin-bottom:12px;
+      background:rgba(255,255,255,var(--card-opacity));border:1px solid var(--border-color);
+      backdrop-filter:blur(var(--card-blur));text-decoration:none;color:inherit;
+      transition:all .3s;position:relative;overflow:hidden;
+    }
+    .link-card:hover {
+      background:rgba(255,255,255,calc(var(--card-opacity) + .04));
+      border-color:color-mix(in srgb,var(--glow-color) 20%,transparent);
+    }
+    .link-card-glow { position:absolute;inset:0;opacity:0;transition:opacity .5s; }
+    .link-card:hover .link-card-glow { opacity:1; }
+    .link-card-icon { font-size:20px;flex-shrink:0;position:relative; }
+    .link-card-body { flex:1;min-width:0;position:relative; }
+    .link-card-title { font-size:14px;font-weight:500;position:relative; }
+    .link-card-desc { font-size:11px;color:var(--text-secondary);margin-top:2px;line-height:1.3; }
+    .link-card-arrow { width:16px;height:16px;flex-shrink:0;color:var(--accent-3);transition:transform .2s;position:relative; }
+    .link-card:hover .link-card-arrow { transform:translateX(2px); }
+    .link-card-bar { position:absolute;bottom:0;left:0;height:2px;width:0;transition:width .5s; }
+    .link-card:hover .link-card-bar { width:100%; }
+    .link-category {
+      font-size:11px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;
+      color:var(--text-secondary);padding:4px 4px 8px;margin-top:8px;display:flex;align-items:center;gap:8px;
+    }
+    .link-category::after { content:'';flex:1;height:1px;background:linear-gradient(90deg,var(--border-color),transparent); }
+    .social-section { padding:0 24px 32px;max-width:480px;margin:0 auto;width:100%; }
+    .social-section h2 { font-size:11px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:var(--text-secondary);margin-bottom:12px; }
+    .social-row { display:flex;align-items:center;justify-content:center;gap:12px;flex-wrap:wrap; }
+    .social-icon-btn {
+      width:48px;height:48px;border-radius:12px;display:flex;align-items:center;justify-content:center;
+      background:rgba(255,255,255,var(--card-opacity));border:1px solid var(--border-color);
+      backdrop-filter:blur(var(--card-blur));color:var(--text-secondary);text-decoration:none;transition:all .2s;
+    }
+    .social-icon-btn:hover { transform:scale(1.1); }
+    .footer-section { padding:0 24px 32px;text-align:center;margin-top:auto; }
+    .public-footer { padding:24px;text-align:center;color:var(--text-secondary);font-size:11px; }
+    .public-footer a { color:var(--accent-3);cursor:pointer; }
+
+    /* === Customizer Panel === */
+    .customizer-overlay { position:fixed;inset:0;z-index:50;background:rgba(0,0,0,0.6);animation:fadeIn .2s; }
+    .customizer-panel {
+      position:fixed;top:0;right:0;bottom:0;width:100%;max-width:400px;z-index:51;
+      background:rgba(10,0,20,0.97);backdrop-filter:blur(20px);
+      border-left:1px solid var(--border-color);overflow-y:auto;padding:24px;animation:slideIn .3s;
+    }
+    .customizer-header { display:flex;align-items:center;justify-content:space-between;margin-bottom:32px; }
+    .customizer-header h2 { font-size:18px;font-weight:600; }
+    .customizer-close { width:32px;height:32px;border-radius:8px;display:flex;align-items:center;justify-content:center;background:none;border:none;color:white;cursor:pointer; }
+    .customizer-close:hover { background:rgba(255,255,255,0.1); }
+    .cz-section { margin-bottom:32px; }
+    .cz-section-title { font-size:12px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--text-secondary);margin-bottom:12px; }
+    .cz-field { margin-bottom:12px; }
+    .cz-field label { display:block;font-size:12px;font-weight:500;color:var(--text-secondary);margin-bottom:4px; }
+    .cz-field input[type="text"],.cz-field input[type="url"] {
+      width:100%;padding:10px 12px;border-radius:10px;background:rgba(255,255,255,0.04);
+      border:1px solid var(--border-color);color:white;font-size:13px;font-family:inherit;outline:none;
+    }
+    .cz-field input:focus { border-color:var(--accent-3); }
+    .cz-field input[type="range"] { width:100%;height:4px;-webkit-appearance:none;background:rgba(255,255,255,0.1);border-radius:2px;outline:none; }
+    .cz-field input[type="range"]::-webkit-slider-thumb { -webkit-appearance:none;width:16px;height:16px;border-radius:50%;background:var(--accent-3);cursor:pointer; }
+    .cz-field input[type="color"] { width:32px;height:32px;border-radius:8px;cursor:pointer;background:transparent;border:1px solid var(--border-color);padding:2px; }
+    .cz-row { display:flex;align-items:center;gap:8px; }
+    .cz-bg-type-row { display:flex;gap:8px; }
+    .cz-bg-type-btn {
+      flex:1;padding:8px 12px;border-radius:10px;font-size:12px;font-weight:500;text-align:center;
+      background:rgba(255,255,255,0.04);border:1px solid var(--border-color);
+      color:var(--text-secondary);cursor:pointer;transition:all .2s;
+    }
+    .cz-bg-type-btn.active { background:color-mix(in srgb,var(--accent-3) 12%,transparent);border-color:color-mix(in srgb,var(--accent-3) 30%,transparent);color:var(--accent-3); }
+    .cz-link-item { padding:12px;border-radius:12px;margin-bottom:12px;background:rgba(255,255,255,0.03);border:1px solid var(--border-color);transition:transform .15s,opacity .15s; }
+    .cz-link-item.dragging { opacity:.4;transform:scale(.97); }
+    .cz-link-item.drag-over { border-color:var(--accent-3);box-shadow:0 0 12px color-mix(in srgb,var(--accent-3) 30%,transparent);transform:scale(1.01); }
+    .cz-link-header { display:flex;align-items:center;gap:8px;margin-bottom:8px; }
+    .drag-handle { cursor:grab;color:var(--text-secondary);flex-shrink:0;display:flex;padding:2px;touch-action:none; }
+    .drag-handle:hover { color:var(--accent-3); }
+    .link-title { font-size:12px;color:var(--text-secondary);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap; }
+    .cz-link-remove { font-size:12px;color:#f87171;background:none;border:none;cursor:pointer;flex-shrink:0; }
+    .cz-add-btn { width:100%;padding:10px;border-radius:12px;font-size:13px;font-weight:500;border:1px dashed var(--border-color);background:none;color:var(--text-secondary);cursor:pointer; }
+    .cz-short-input { max-width:80px;text-align:center; }
+
+    /* Spinner */
+    .spinner { width:24px;height:24px;border:3px solid var(--border-color);border-top-color:var(--accent-3);border-radius:50%;animation:spin .6s linear infinite;margin:40px auto; }
+    @keyframes spin { to{transform:rotate(360deg)} }
+
+    .page-loading { display:flex;align-items:center;justify-content:center;min-height:60vh;flex-direction:column;gap:12px; }
+    .page-loading p { font-size:13px;color:var(--text-secondary); }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+
+  <script type="module">
+    import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+
+    // ========== Config ==========
+    const SUPABASE_URL = 'https://rnbfzfwkxxdpixhvilnx.supabase.co'
+    const SUPABASE_ANON_KEY = 'sb_publishable_FiSWuZYttL-vyXLqz5B99g_EVT-qxP_'
+    const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
+
+    // ========== App State ==========
+    let currentUser = null
+    let currentRoute = ''
+    let userProfile = null
+
+    // ========== Router ==========
+    function navigate(hash) {
+      window.location.hash = hash
+    }
+
+    window.addEventListener('hashchange', route)
+    window.route = navigate
+
+    function getHash() { return window.location.hash.slice(1) || '/login' }
+
+    async function route() {
+      const hash = getHash()
+      currentRoute = hash
+      const { data: { user } } = await supabase.auth.getUser()
+      currentUser = user
+
+      if (hash.startsWith('/u/')) {
+        const username = hash.slice(3)
+        renderPublicProfile(username)
+      } else if (hash === '/login' || hash === '/register') {
+        if (currentUser) { navigate('/dashboard'); return }
+        renderAuth(hash === '/register')
+      } else if (hash === '/dashboard') {
+        if (!currentUser) { navigate('/login'); return }
+        renderDashboard()
+      } else {
+        navigate('/login')
+      }
+    }
+
+    // ========== Render Auth ==========
+    function renderAuth(isRegister) {
+      const title = isRegister ? 'Create Account' : 'Welcome Back'
+      const subtitle = isRegister ? 'Create your LinkHub+ page' : 'Sign in to your dashboard'
+      const toggle = isRegister
+        ? "Already have an account? <a onclick=\"route()\">Sign in</a>"
+        : "Don't have an account? <a onclick=\"navigate('/register')\">Create one</a>"
+      const usernameField = isRegister
+        ? '<div class="auth-username-row"><input class="auth-input" id="auth-username" type="text" placeholder="username" style="margin-bottom:0" /><span>.linkhub.page</span></div><div style="margin-bottom:14px"></div>'
+        : ''
+
+      document.getElementById('root').innerHTML = `
+        <div id="bg-overlay" style="position:fixed;inset:0;z-index:0;background:linear-gradient(135deg,var(--accent-1),var(--accent-2))"></div>
+        <div class="auth-page">
+          <div class="auth-card animate-slide-in">
+            <h1>${title}</h1>
+            <p>${subtitle}</p>
+            <div class="auth-error" id="auth-error"></div>
+            <div class="auth-success" id="auth-success"></div>
+            <input class="auth-input" id="auth-email" type="email" placeholder="Email" autocomplete="email" />
+            <input class="auth-input" id="auth-password" type="password" placeholder="Password" autocomplete="${isRegister ? 'new-password' : 'current-password'}" />
+            ${usernameField}
+            <button class="auth-btn" id="auth-submit" style="background:linear-gradient(135deg,var(--accent-1),var(--accent-2))">
+              ${isRegister ? 'Create Account' : 'Sign In'}
+            </button>
+            <div class="auth-link">${toggle}</div>
+          </div>
+        </div>`
+
+      document.getElementById('auth-submit').onclick = async () => {
+        const email = document.getElementById('auth-email').value
+        const pass = document.getElementById('auth-password').value
+        const errEl = document.getElementById('auth-error')
+        errEl.textContent = ''
+        if (!email || !pass) { errEl.textContent = 'Fill in all fields'; return }
+
+        if (isRegister) {
+          const username = document.getElementById('auth-username').value
+          if (!username || !/^[a-z0-9_]{3,20}$/.test(username)) {
+            errEl.textContent = 'Username: 3-20 chars, lowercase, numbers, underscore'
+            return
+          }
+          document.getElementById('auth-submit').disabled = true
+          document.getElementById('auth-submit').textContent = 'Creating...'
+          const { data, error } = await supabase.auth.signUp({ email, password: pass })
+          if (error) { errEl.textContent = error.message; document.getElementById('auth-submit').disabled = false; document.getElementById('auth-submit').textContent = 'Create Account'; return }
+          // Insert profile
+          const { error: profErr } = await supabase.from('profiles').insert({
+            id: data.user.id, username: username,
+            page_data: getDefaultData()
+          })
+          if (profErr) { errEl.textContent = profErr.message; return }
+          document.getElementById('auth-success').textContent = 'Account created! Check your email to confirm.'
+          document.getElementById('auth-submit').textContent = 'Done'
+        } else {
+          document.getElementById('auth-submit').disabled = true
+          document.getElementById('auth-submit').textContent = 'Signing in...'
+          const { data, error } = await supabase.auth.signInWithPassword({ email, password: pass })
+          if (error) { errEl.textContent = error.message; document.getElementById('auth-submit').disabled = false; document.getElementById('auth-submit').textContent = 'Sign In'; return }
+          navigate('/dashboard')
+        }
+      }
+
+      if (isRegister) {
+        document.getElementById('auth-username').oninput = function() {
+          this.value = this.value.toLowerCase().replace(/[^a-z0-9_]/g, '')
+        }
+      }
+    }
+
+    // ========== Default Data ==========
+    function getDefaultData() {
+      return {
+        profile: { avatar: '', name: 'Your Name', bio: 'Digital creator & content maker', status: 'open to work', statusEmoji: '\u2728' },
+        links: [
+          { id: '1', title: 'E-Commerce App', url: 'https://example.com', icon: '\uD83D\uDECD\uFE0F', description: 'Full-stack marketplace with React & Node.js', category: 'Web Apps', color: '' },
+          { id: '2', title: 'Weather Dashboard', url: 'https://example.com', icon: '\uD83C\uDF26\uFE0F', description: 'Real-time weather with interactive maps', category: 'Web Apps', color: '' },
+          { id: '3', title: 'Fitness Tracker', url: 'https://example.com', icon: '\uD83C\uDFC3', description: 'Mobile app for workout & diet tracking', category: 'Mobile Apps', color: '' },
+        ],
+        socials: [
+          { platform: 'Instagram', url: 'https://instagram.com', icon: 'instagram' },
+          { platform: 'Twitter', url: 'https://twitter.com', icon: 'twitter' },
+          { platform: 'GitHub', url: 'https://github.com', icon: 'github' },
+        ],
+        theme: { bgType: 'gradient', primaryColor: '#5D34D0', secondaryColor: '#FF006E', accentColor: '#00F0FF', cardOpacity: 0.06, cardBlur: 12, glowIntensity: 1, solidColor: '#0a0014', particleColor: '#FF006E', particleCount: 50 }
+      }
+    }
+
+    // ========== Dashboard ==========
+    let dashData = null
+
+    async function renderDashboard() {
+      const root = document.getElementById('root')
+      root.innerHTML = `
+        <div class="dash-header">
+          <h2>LinkHub+</h2>
+          <div class="dash-header-right">
+            <span class="dash-username" id="dash-username"></span>
+            <button class="dash-btn dash-btn-primary" onclick="window.viewPublicPage()">View Page</button>
+            <button class="dash-btn dash-btn-danger" onclick="window.signOut()">Sign Out</button>
+          </div>
+        </div>
+        <div class="dash-content">
+          <div class="spinner"></div>
+          <p style="text-align:center;color:var(--text-secondary);font-size:13px">Loading your page...</p>
+        </div>`
+
+      // Fetch profile
+      const { data: prof, error } = await supabase.from('profiles').select('*').eq('id', currentUser.id).single()
+      if (error) {
+        // Create if not exists
+        const username = currentUser.email.split('@')[0].replace(/[^a-z0-9_]/g, '').slice(0, 20)
+        const { data: newProf, error: insErr } = await supabase.from('profiles').insert({
+          id: currentUser.id, username: username.toLowerCase(),
+          page_data: getDefaultData()
+        }).select().single()
+        if (insErr) { root.innerHTML = `<p style="padding:40px;color:#f87171">Error: ${insErr.message}</p>`; return }
+        userProfile = newProf
+      } else {
+        userProfile = prof
+      }
+
+      dashData = userProfile.page_data || getDefaultData()
+      document.getElementById('dash-username').textContent = '@' + userProfile.username
+      window.viewPublicPage = () => navigate('/u/' + userProfile.username)
+
+      renderCustomizerPage(dashData)
+    }
+
+    async function saveDashData() {
+      if (!userProfile) return
+      const { error } = await supabase.from('profiles').update({ page_data: dashData }).eq('id', currentUser.id)
+      if (error) console.error('Save error:', error)
+    }
+
+    function renderCustomizerPage(d) {
+      const root = document.querySelector('.dash-content')
+      applyTheme(d.theme)
+      const initial = d.profile.name.charAt(0).toUpperCase()
+      const avatarInner = d.profile.avatar
+        ? '<img src="' + esc(d.profile.avatar) + '" alt="' + esc(d.profile.name) + '" />'
+        : '<span style="color:var(--accent-3)">' + initial + '</span>'
+
+      // Group links
+      var cats = {}
+      d.links.forEach(function(l) { var c = l.category||''; if(!cats[c]) cats[c]=[]; cats[c].push(l) })
+      var linksHtml = ''
+      var gi = 0
+      var ck = Object.keys(cats).sort(function(a,b) { if(!a)return 1;if(!b)return -1;return d.links.indexOf(cats[a][0])-d.links.indexOf(cats[b][0]) })
+      ck.forEach(function(cat) {
+        if(cat) linksHtml += '<div class="link-category">' + esc(cat) + '</div>'
+        cats[cat].forEach(function(link) {
+          var bs = link.color ? 'border-color:'+link.color+'50;' : ''
+          var gg = link.color ? 'background:linear-gradient(135deg,'+link.color+'15,transparent)' : ''
+          linksHtml += '<a href="'+esc(link.url)+'" target="_blank" rel="noopener noreferrer" class="link-card" style="animation-delay:'+(gi*.08)+'s;'+bs+'">'
+            +'<div class="link-card-glow" style="'+gg+'"></div>'
+            +(link.icon?'<span class="link-card-icon">'+link.icon+'</span>':'')
+            +'<div class="link-card-body"><div class="link-card-title">'+esc(link.title)+'</div>'
+            +(link.description?'<div class="link-card-desc">'+esc(link.description)+'</div>':'')+'</div>'
+            +'<svg class="link-card-arrow" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>'
+            +'<div class="link-card-bar" style="'+(link.color?'background:'+link.color+';':'')+'"></div></a>'
+          gi++
+        })
+      })
+
+      const socialsHtml = d.socials.map(function(s) {
+        var svg = icons[s.icon] || ''
+        return '<a href="'+esc(s.url)+'" target="_blank" rel="noopener noreferrer" class="social-icon-btn">'+svg+'</a>'
+      }).join('')
+
+      const statusHtml = d.profile.status && d.profile.status.trim()
+        ? '<div class="profile-status animate-float">'+(d.profile.statusEmoji?d.profile.statusEmoji+' ':'')+esc(d.profile.status)+'</div>'
+        : ''
+
+      root.innerHTML =
+        '<div style="max-width:480px;margin:0 auto">'
+        +'<div class="profile-section" style="padding-top:24px">'
+          +'<div class="avatar-ring">'+avatarInner+'</div>'
+          +'<h1 class="profile-name">'+esc(d.profile.name)+'</h1>'
+          +'<p class="profile-bio">'+esc(d.profile.bio)+'</p>'
+          +statusHtml
+        +'</div>'
+        +'<div class="links-section">'
+          +'<div class="links-header"><h2>Links ('+d.links.length+')</h2></div>'
+          +linksHtml
+        +'</div>'
+        +(d.socials.length?'<div class="social-section"><h2>Social</h2><div class="social-row">'+socialsHtml+'</div></div>':'')
+        +'</div>'
+        +'<div class="footer-section"><button class="customize-btn" onclick="window.openDashCustomizer()" style="display:inline-flex;align-items:center;gap:8px;padding:10px 20px;border-radius:12px;font-size:13px;font-weight:500;background:rgba(255,255,255,0.04);border:1px solid var(--border-color);color:var(--text-secondary);backdrop-filter:blur(8px);cursor:pointer">Edit Page</button></div>'
+
+      // Particle canvas
+      const oldCanvas = document.getElementById('canvas-bg')
+      if (oldCanvas) oldCanvas.remove()
+      if (d.theme.bgType === 'particle') {
+        const canv = document.createElement('canvas')
+        canv.id = 'canvas-bg'
+        canv.style.cssText = 'position:fixed;inset:0;z-index:0;pointer-events:none'
+        document.body.prepend(canv)
+        initParticles(d.theme)
+      }
+    }
+
+    // ========== Dashboard Customizer ==========
+    window.openDashCustomizer = function() {
+      const d = dashData
+      var bgTypes = ['gradient','solid','particle']
+
+      var linksEditHtml = d.links.map(function(link, idx) {
+        return '<div class="cz-link-item" draggable="true" data-link-id="'+link.id+'"'
+          +' ondragstart="onDragStart(event)" ondragover="onDragOver(event)" ondrop="onDrop(event)" ondragend="onDragEnd(event)">'
+          +'<div class="cz-link-header"><span class="drag-handle"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 6h.01M16 6h.01M8 12h.01M16 12h.01M8 18h.01M16 18h.01" stroke-linecap="round"/></svg></span>'
+          +'<span class="link-title">'+esc(link.title||'Untitled')+'</span>'
+          +'<button class="cz-link-remove" onclick="removeLink(this)" data-link-id="'+link.id+'">Remove</button></div>'
+          +'<div class="cz-field"><label>Title</label><input type="text" value="'+esc(link.title)+'" oninput="updateLink(\''+link.id+'\',\'title\',this.value)" /></div>'
+          +'<div class="cz-field"><label>Description</label><input type="text" value="'+esc(link.description||'')+'" oninput="updateLink(\''+link.id+'\',\'description\',this.value)" placeholder="Brief project description" /></div>'
+          +'<div class="cz-field"><label>URL</label><input type="text" value="'+esc(link.url)+'" oninput="updateLink(\''+link.id+'\',\'url\',this.value)" /></div>'
+          +'<div class="cz-field"><label>Icon</label><input type="text" class="cz-short-input" value="'+esc(link.icon||'')+'" oninput="updateLink(\''+link.id+'\',\'icon\',this.value)" /></div>'
+          +'<div class="cz-field"><label>Category</label><input type="text" value="'+esc(link.category||'')+'" oninput="updateLink(\''+link.id+'\',\'category\',this.value)" placeholder="e.g. Web Apps" /></div>'
+          +'<div class="cz-field"><label>Color</label><div class="cz-row"><input type="color" value="'+(link.color||'#00F0FF')+'" oninput="updateLink(\''+link.id+'\',\'color\',this.value)" />'
+          +'<input type="text" class="cz-short-input" value="'+esc(link.color||'')+'" oninput="updateLink(\''+link.id+'\',\'color\',this.value)" placeholder="#hex" style="max-width:90px;font-family:monospace;font-size:12px" /></div></div></div>'
+      }).join('')
+
+      var socialsEditHtml = d.socials.map(function(s,i) {
+        return '<div class="cz-link-item"><div class="cz-link-header"><span>'+esc(s.platform)+'</span></div>'
+          +'<div class="cz-field"><label>URL</label><input type="text" value="'+esc(s.url)+'" oninput="updateSocial('+i+',\'url\',this.value)" /></div></div>'
+      }).join('')
+
+      var panel = document.createElement('div')
+      panel.id = 'customizer'
+      panel.innerHTML =
+        '<div class="customizer-overlay" onclick="closeCustomizer()"></div>'
+        +'<div class="customizer-panel">'
+        +'<div class="customizer-header"><h2>Edit Page</h2><button class="customizer-close" onclick="closeCustomizer()"><svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg></button></div>'
+
+        +'<div class="cz-section"><div class="cz-section-title">Profile</div>'
+        +'<div class="cz-field"><label>Avatar URL</label><input type="text" value="'+esc(d.profile.avatar)+'" oninput="updateProfile(\'avatar\',this.value)" placeholder="https://..." /></div>'
+        +'<div class="cz-field"><label>Name</label><input type="text" value="'+esc(d.profile.name)+'" oninput="updateProfile(\'name\',this.value)" /></div>'
+        +'<div class="cz-field"><label>Bio</label><input type="text" value="'+esc(d.profile.bio)+'" oninput="updateProfile(\'bio\',this.value)" /></div>'
+        +'<div class="cz-field"><label>Status</label><input type="text" value="'+esc(d.profile.status||'')+'" oninput="updateProfile(\'status\',this.value)" placeholder="e.g. open to work" /></div>'
+        +'<div class="cz-field"><label>Status Emoji</label><input type="text" class="cz-short-input" value="'+esc(d.profile.statusEmoji||'')+'" oninput="updateProfile(\'statusEmoji\',this.value)" placeholder="*" /></div></div>'
+
+        +'<div class="cz-section"><div class="cz-section-title">Background</div>'
+        +'<div class="cz-field"><label>Type</label><div class="cz-bg-type-row">'
+        +bgTypes.map(function(t){return '<button class="cz-bg-type-btn'+(d.theme.bgType===t?' active':'')+'" onclick="updateBgType(\''+t+'\')">'+t.charAt(0).toUpperCase()+t.slice(1)+'</button>'}).join('')
+        +'</div></div>'
+        +(d.theme.bgType==='gradient'
+          ?'<div class="cz-field"><label>Primary</label><div class="cz-row"><input type="color" value="'+d.theme.primaryColor+'" oninput="updateTheme(\'primaryColor\',this.value)" /><input type="text" value="'+d.theme.primaryColor+'" oninput="updateTheme(\'primaryColor\',this.value)" style="font-family:monospace;font-size:12px;flex:1" /></div></div>'
+          +'<div class="cz-field"><label>Secondary</label><div class="cz-row"><input type="color" value="'+d.theme.secondaryColor+'" oninput="updateTheme(\'secondaryColor\',this.value)" /><input type="text" value="'+d.theme.secondaryColor+'" oninput="updateTheme(\'secondaryColor\',this.value)" style="font-family:monospace;font-size:12px;flex:1" /></div></div>'
+          +'<div class="cz-field"><label>Accent</label><div class="cz-row"><input type="color" value="'+d.theme.accentColor+'" oninput="updateTheme(\'accentColor\',this.value)" /><input type="text" value="'+d.theme.accentColor+'" oninput="updateTheme(\'accentColor\',this.value)" style="font-family:monospace;font-size:12px;flex:1" /></div></div>':'')
+        +(d.theme.bgType==='solid'
+          ?'<div class="cz-field"><label>Color</label><div class="cz-row"><input type="color" value="'+d.theme.solidColor+'" oninput="updateTheme(\'solidColor\',this.value)" /><input type="text" value="'+d.theme.solidColor+'" oninput="updateTheme(\'solidColor\',this.value)" style="font-family:monospace;font-size:12px;flex:1" /></div></div>':'')
+        +(d.theme.bgType==='particle'
+          ?'<div class="cz-field"><label>Particle Color</label><div class="cz-row"><input type="color" value="'+d.theme.particleColor+'" oninput="updateTheme(\'particleColor\',this.value)" /><input type="text" value="'+d.theme.particleColor+'" oninput="updateTheme(\'particleColor\',this.value)" style="font-family:monospace;font-size:12px;flex:1" /></div></div>'
+          +'<div class="cz-field"><label>Count: '+d.theme.particleCount+'</label><input type="range" min="10" max="200" value="'+d.theme.particleCount+'" oninput="updateTheme(\'particleCount\',Number(this.value))" /></div>':'')
+        +'<div class="cz-field"><label>Card Opacity: '+Math.round(d.theme.cardOpacity*100)+'%</label><input type="range" min="0" max="20" value="'+Math.round(d.theme.cardOpacity*100)+'" oninput="updateTheme(\'cardOpacity\',Number(this.value)/100)" /></div>'
+        +'<div class="cz-field"><label>Blur: '+d.theme.cardBlur+'px</label><input type="range" min="0" max="24" value="'+d.theme.cardBlur+'" oninput="updateTheme(\'cardBlur\',Number(this.value))" /></div>'
+        +'<div class="cz-field"><label>Glow: '+d.theme.glowIntensity.toFixed(1)+'x</label><input type="range" min="0" max="3" step="0.1" value="'+d.theme.glowIntensity+'" oninput="updateTheme(\'glowIntensity\',Number(this.value))" /></div></div>'
+
+        +'<div class="cz-section"><div class="cz-section-title">Links</div>'+linksEditHtml
+        +'<button class="cz-add-btn" onclick="addLink()">+ Add Link</button></div>'
+
+        +'<div class="cz-section"><div class="cz-section-title">Social</div>'+socialsEditHtml+'</div>'
+        +'</div>'
+      document.body.appendChild(panel)
+    }
+
+    window.closeCustomizer = function() {
+      var p = document.getElementById('customizer')
+      if (p) p.remove()
+      renderCustomizerPage(dashData)
+    }
+
+    // Mutation handlers
+    window.updateProfile = function(field, val) { dashData.profile[field] = val; saveDashData(); renderCustomizerPage(dashData) }
+    window.updateTheme = function(field, val) { dashData.theme[field] = val; saveDashData(); renderCustomizerPage(dashData) }
+    window.updateBgType = function(t) { dashData.theme.bgType = t; saveDashData(); renderCustomizerPage(dashData) }
+    window.updateLink = function(id, field, val) {
+      var l = dashData.links.find(function(l) { return l.id === id })
+      if (l) { l[field] = val; saveDashData(); renderCustomizerPage(dashData) }
+    }
+    window.removeLink = function(btn) {
+      var id = btn.getAttribute('data-link-id')
+      dashData.links = dashData.links.filter(function(l) { return l.id !== id })
+      saveDashData(); renderCustomizerPage(dashData)
+    }
+    window.addLink = function() {
+      dashData.links.push({id:crypto.randomUUID(),title:'New Project',url:'https://',icon:'\uD83D\uDD17',description:'',category:'',color:''})
+      saveDashData(); renderCustomizerPage(dashData)
+    }
+    window.updateSocial = function(idx, field, val) {
+      if (dashData.socials[idx]) { dashData.socials[idx][field] = val; saveDashData(); renderCustomizerPage(dashData) }
+    }
+
+    // Drag reorder
+    var dragSrcId = null
+    window.onDragStart = function(e) {
+      dragSrcId = e.target.closest('.cz-link-item').getAttribute('data-link-id')
+      e.target.closest('.cz-link-item').classList.add('dragging')
+      e.dataTransfer.effectAllowed = 'move'
+    }
+    window.onDragOver = function(e) {
+      e.preventDefault(); e.dataTransfer.dropEffect = 'move'
+      document.querySelectorAll('.cz-link-item').forEach(function(el) { el.classList.remove('drag-over') })
+      var t = e.target.closest('.cz-link-item')
+      if (t && t.getAttribute('data-link-id') !== dragSrcId) t.classList.add('drag-over')
+    }
+    window.onDrop = function(e) {
+      e.preventDefault()
+      document.querySelectorAll('.cz-link-item').forEach(function(el) { el.classList.remove('drag-over','dragging') })
+      var tid = e.target.closest('.cz-link-item')?.getAttribute('data-link-id')
+      if (!dragSrcId || !tid || dragSrcId === tid) return
+      var fi = dashData.links.findIndex(function(l) { return l.id === dragSrcId })
+      var ti = dashData.links.findIndex(function(l) { return l.id === tid })
+      if (fi === -1 || ti === -1) return
+      var item = dashData.links.splice(fi, 1)[0]
+      dashData.links.splice(ti, 0, item)
+      dragSrcId = null; saveDashData(); renderCustomizerPage(dashData)
+    }
+    window.onDragEnd = function() {
+      document.querySelectorAll('.cz-link-item').forEach(function(el) { el.classList.remove('dragging','drag-over') })
+      dragSrcId = null
+    }
+
+    // Sign out
+    window.signOut = async function() {
+      await supabase.auth.signOut()
+      currentUser = null; userProfile = null
+      navigate('/login')
+    }
+
+    // ========== Public Profile ==========
+    async function renderPublicProfile(username) {
+      const root = document.getElementById('root')
+      root.innerHTML = '<div class="page-loading"><div class="spinner"></div><p>Loading page...</p></div>'
+
+      const { data: prof, error } = await supabase.from('profiles').select('*').eq('username', username).maybeSingle()
+      if (error || !prof) {
+        root.innerHTML =
+          '<div id="bg-overlay" style="position:fixed;inset:0;z-index:0;background:linear-gradient(135deg,var(--accent-1),var(--accent-2))"></div>'
+          +'<div class="auth-page"><div class="auth-card" style="text-align:center">'
+          +'<h1>Page Not Found</h1>'
+          +'<p>This username doesn\'t exist</p>'
+          +'<button class="auth-btn" onclick="navigate(\'/login\')" style="background:linear-gradient(135deg,var(--accent-1),var(--accent-2));margin-top:12px">Go Home</button>'
+          +'</div></div>'
+        return
+      }
+
+      const d = prof.page_data
+      if (!d) { root.innerHTML = '<p>No data</p>'; return }
+      applyTheme(d.theme)
+
+      // Particle canvas
+      const oldCanvas = document.getElementById('canvas-bg')
+      if (oldCanvas) oldCanvas.remove()
+      if (d.theme.bgType === 'particle') {
+        const canv = document.createElement('canvas')
+        canv.id = 'canvas-bg'
+        canv.style.cssText = 'position:fixed;inset:0;z-index:0;pointer-events:none'
+        document.body.prepend(canv)
+        initParticles(d.theme)
+      }
+
+      const initial = d.profile.name.charAt(0).toUpperCase()
+      const avatarInner = d.profile.avatar
+        ? '<img src="'+esc(d.profile.avatar)+'" alt="'+esc(d.profile.name)+'" />'
+        : '<span style="color:var(--accent-3)">'+initial+'</span>'
+
+      var cats = {}
+      d.links.forEach(function(l) { var c = l.category||''; if(!cats[c]) cats[c]=[]; cats[c].push(l) })
+      var linksHtml = ''
+      var gi = 0
+      var ck = Object.keys(cats).sort(function(a,b) { if(!a)return 1;if(!b)return -1;return d.links.indexOf(cats[a][0])-d.links.indexOf(cats[b][0]) })
+      ck.forEach(function(cat) {
+        if(cat) linksHtml += '<div class="link-category">'+esc(cat)+'</div>'
+        cats[cat].forEach(function(link) {
+          var bs = link.color ? 'border-color:'+link.color+'50;' : ''
+          var gg = link.color ? 'background:linear-gradient(135deg,'+link.color+'15,transparent)' : ''
+          linksHtml += '<a href="'+esc(link.url)+'" target="_blank" rel="noopener noreferrer" class="link-card" style="animation-delay:'+(gi*.08)+'s;'+bs+'">'
+            +'<div class="link-card-glow" style="'+gg+'"></div>'
+            +(link.icon?'<span class="link-card-icon">'+link.icon+'</span>':'')
+            +'<div class="link-card-body"><div class="link-card-title">'+esc(link.title)+'</div>'
+            +(link.description?'<div class="link-card-desc">'+esc(link.description)+'</div>':'')+'</div>'
+            +'<svg class="link-card-arrow" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>'
+            +'<div class="link-card-bar" style="'+(link.color?'background:'+link.color+';':'')+'"></div></a>'
+          gi++
+        })
+      })
+
+      const socialsHtml = d.socials.map(function(s) {
+        var svg = icons[s.icon] || ''
+        return '<a href="'+esc(s.url)+'" target="_blank" rel="noopener noreferrer" class="social-icon-btn">'+svg+'</a>'
+      }).join('')
+
+      const statusHtml = d.profile.status && d.profile.status.trim()
+        ? '<div class="profile-status animate-float">'+(d.profile.statusEmoji?d.profile.statusEmoji+' ':'')+esc(d.profile.status)+'</div>'
+        : ''
+
+      root.innerHTML =
+        '<div style="min-height:100vh;display:flex;flex-direction:column">'
+        +'<div class="profile-section">'
+          +'<div class="avatar-ring">'+avatarInner+'</div>'
+          +'<h1 class="profile-name">'+esc(d.profile.name)+'</h1>'
+          +'<p class="profile-bio">'+esc(d.profile.bio)+'</p>'
+          +statusHtml
+        +'</div>'
+        +'<div class="links-section">'
+          +'<div class="links-header"><h2>Links ('+d.links.length+')</h2></div>'
+          +linksHtml
+        +'</div>'
+        +(d.socials.length?'<div class="social-section"><h2>Social</h2><div class="social-row">'+socialsHtml+'</div></div>':'')
+        +'<div style="flex:1"></div>'
+        +'<div class="public-footer">Powered by <a onclick="navigate(\'/login\')">LinkHub+</a></div>'
+        +'</div>'
+    }
+
+    // ========== Helpers ==========
+    function applyTheme(t) {
+      const root = document.documentElement
+      root.style.setProperty('--accent-1', t.primaryColor)
+      root.style.setProperty('--accent-2', t.secondaryColor)
+      root.style.setProperty('--accent-3', t.accentColor)
+      root.style.setProperty('--glow-color', t.accentColor)
+      root.style.setProperty('--card-opacity', String(t.cardOpacity))
+      root.style.setProperty('--card-blur', t.cardBlur + 'px')
+      root.style.setProperty('--glow-intensity', String(t.glowIntensity))
+      const overlay = document.getElementById('bg-overlay')
+      if (overlay) overlay.style.background = t.bgType === 'gradient'
+        ? 'linear-gradient(135deg, ' + t.primaryColor + ', ' + t.secondaryColor + ')'
+        : t.solidColor
+    }
+
+    function esc(str) { var d = document.createElement('div'); d.textContent = str; return d.innerHTML }
+
+    // Particles
+    var particlesState = { particles: [], mouseX: -1000, mouseY: -1000, animId: null }
+    function initParticles(theme) {
+      const canv = document.getElementById('canvas-bg')
+      if (!canv) return
+      const ctx = canv.getContext('2d')
+      if (!ctx) return
+      canv.width = window.innerWidth; canv.height = window.innerHeight
+      if (particlesState.animId) cancelAnimationFrame(particlesState.animId)
+      const count = theme.particleCount
+      particlesState.particles = Array.from({length:count}, function() {
+        return { x:Math.random()*canv.width, y:Math.random()*canv.height, vx:(Math.random()-.5)*.5, vy:(Math.random()-.5)*.5, size:Math.random()*3+1, alpha:Math.random()*.5+.1, alphaDir:Math.random()>.5?1:-1 }
+      })
+      function animate() {
+        ctx.clearRect(0,0,canv.width,canv.height)
+        const color = theme.particleColor
+        for (var i=0;i<particlesState.particles.length;i++) {
+          var p = particlesState.particles[i]
+          var dx = particlesState.mouseX - p.x, dy = particlesState.mouseY - p.y, dist = Math.sqrt(dx*dx+dy*dy)
+          if (dist < 150) { var f = (150-dist)/150*.02; p.vx -= dx*f; p.vy -= dy*f }
+          p.vx += (Math.random()-.5)*.01; p.vy += (Math.random()-.5)*.01
+          p.vx *= .99; p.vy *= .99; p.x += p.vx; p.y += p.vy
+          p.alpha += p.alphaDir*.003; if (p.alpha>.8||p.alpha<.1) p.alphaDir*=-1
+          if (p.x<0) p.x=canv.width; if (p.x>canv.width) p.x=0; if (p.y<0) p.y=canv.height; if (p.y>canv.height) p.y=0
+          ctx.beginPath(); ctx.arc(p.x,p.y,p.size,0,Math.PI*2); ctx.fillStyle=color; ctx.globalAlpha=p.alpha; ctx.fill()
+          for (var j=i+1;j<particlesState.particles.length;j++) {
+            var p2=particlesState.particles[j],dx2=p.x-p2.x,dy2=p.y-p2.y,dist2=Math.sqrt(dx2*dx2+dy2*dy2)
+            if (dist2<100) { ctx.beginPath();ctx.moveTo(p.x,p.y);ctx.lineTo(p2.x,p2.y);ctx.strokeStyle=color;ctx.globalAlpha=(1-dist2/100)*.15;ctx.stroke() }
+          }
+        }
+        ctx.globalAlpha=1; particlesState.animId=requestAnimationFrame(animate)
+      }
+      animate()
+    }
+
+    // Icons
+    const icons = {
+      instagram: '<svg viewBox="0 0 24 24" fill="currentColor" width="20" height="20"><path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zm0-2.163c-3.259 0-3.667.014-4.947.072-4.358.2-6.78 2.618-6.98 6.98-.059 1.281-.073 1.689-.073 4.948 0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98 1.281.058 1.689.072 4.948.072 3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98-1.281-.059-1.69-.073-4.949-.073zm0 5.838c-3.403 0-6.162 2.759-6.162 6.162s2.759 6.163 6.162 6.163 6.162-2.759 6.162-6.163c0-3.403-2.759-6.162-6.162-6.162zm0 10.162c-2.209 0-4-1.79-4-4 0-2.209 1.791-4 4-4s4 1.791 4 4c0 2.21-1.791 4-4 4zm6.406-11.845c-.796 0-1.441.645-1.441 1.44s.645 1.44 1.441 1.44c.795 0 1.439-.645 1.439-1.44s-.644-1.44-1.439-1.44z"/></svg>',
+      twitter: '<svg viewBox="0 0 24 24" fill="currentColor" width="20" height="20"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg>',
+      tiktok: '<svg viewBox="0 0 24 24" fill="currentColor" width="20" height="20"><path d="M12.525.02c1.31-.02 2.61-.01 3.91-.02.08 1.53.63 3.09 1.75 4.17 1.12 1.11 2.7 1.62 4.24 1.79v4.03c-1.44-.05-2.89-.35-4.2-.97-.57-.26-1.1-.59-1.62-.93-.01 2.92.01 5.84-.02 8.75-.08 1.4-.54 2.79-1.35 3.94-1.31 1.92-3.58 3.17-5.91 3.21-1.43.08-2.86-.31-4.08-1.03-2.02-1.19-3.44-3.37-3.65-5.71-.02-.5-.03-1-.01-1.49.18-1.9 1.12-3.72 2.58-4.96 1.66-1.44 3.98-2.13 6.15-1.72.02 1.48-.04 2.96-.04 4.44-.99-.32-2.15-.23-3.02.37-.63.41-1.11 1.04-1.36 1.75-.21.51-.15 1.07-.14 1.61.24 1.64 1.82 3.02 3.5 2.87 1.12-.01 2.19-.66 2.77-1.61.19-.33.4-.67.41-1.06.1-1.79.06-3.57.07-5.36.01-4.03-.01-8.05.02-12.07z"/></svg>',
+      youtube: '<svg viewBox="0 0 24 24" fill="currentColor" width="20" height="20"><path d="M23.498 6.186a3.016 3.016 0 00-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 00.502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 002.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 002.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/></svg>',
+      github: '<svg viewBox="0 0 24 24" fill="currentColor" width="20" height="20"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/></svg>',
+      linkedin: '<svg viewBox="0 0 24 24" fill="currentColor" width="20" height="20"><path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433a2.062 2.062 0 01-2.063-2.065 2.064 2.064 0 112.063 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z"/></svg>',
+    }
+
+    // Mouse tracking for particles
+    document.addEventListener('mousemove', function(e) { particlesState.mouseX = e.clientX; particlesState.mouseY = e.clientY })
+    window.addEventListener('resize', function() {
+      if (dashData && dashData.theme.bgType === 'particle') initParticles(dashData.theme)
+    })
+
+    // ========== Init ==========
+    route()
+  </script>
+</body>
+</html>
