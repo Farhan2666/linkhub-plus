@@ -303,7 +303,9 @@
           var tok = getToken()
           if (tok) headers['Authorization'] = 'Bearer ' + tok
           if (q.method !== 'GET') headers['Prefer'] = 'return=representation'
-          return fetch(url, { method: q.method, headers: headers, body: q.body ? JSON.stringify(q.body) : null })
+          var fetchOpts = { method: q.method, headers: headers }
+          if (q.body) fetchOpts.body = JSON.stringify(q.body)
+          return fetch(url, fetchOpts)
             .then(function(r) {
               if (r.status === 204) return null
               return r.json().then(function(d) {
