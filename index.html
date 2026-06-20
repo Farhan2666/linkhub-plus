@@ -795,6 +795,8 @@
     // Drag reorder
     var dragSrcId = null
     window.onDragStart = function(e) {
+      var tag = e.target.tagName
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'BUTTON' || tag === 'A') { e.preventDefault(); return }
       dragSrcId = e.target.closest('.cz-link-item').getAttribute('data-link-id')
       e.target.closest('.cz-link-item').classList.add('dragging')
       e.dataTransfer.effectAllowed = 'move'
