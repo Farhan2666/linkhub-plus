@@ -230,44 +230,50 @@
 
     function getHash() { return window.location.hash.slice(1) || '/login' }
 
-    async function route() {
-      const hash = getHash()
-      currentRoute = hash
+    function showFatal(msg) {
+      document.getElementById('root').innerHTML = '<div style="padding:40px;color:#f87171;text-align:center;font-family:sans-serif"><h2>Something went wrong</h2><p style="margin-top:12px;font-size:14px">'+esc(msg)+'</p></div>'
+    }
 
-      if (hash.includes('type=recovery') || hash.includes('access_token')) {
-        var p = new URLSearchParams(hash)
-        var at = p.get('access_token')
-        var rt = p.get('refresh_token')
-        if (at) await supabase.auth.setSession({ access_token: at, refresh_token: rt })
-        const { data: { user } } = await supabase.auth.getUser()
-        currentUser = user
-        if (hash.includes('type=recovery') && user) {
-          renderResetPassword()
+    async function route() {
+      try {
+        const hash = getHash()
+        currentRoute = hash
+
+        if (hash.includes('type=recovery') || hash.includes('access_token')) {
+          var p = new URLSearchParams(hash)
+          var at = p.get('access_token')
+          var rt = p.get('refresh_token')
+          if (at) await supabase.auth.setSession({ access_token: at, refresh_token: rt })
+          const { data: { user } } = await supabase.auth.getUser()
+          currentUser = user
+          if (hash.includes('type=recovery') && user) {
+            renderResetPassword()
+            return
+          }
+          if (currentUser) { navigate('/dashboard'); return }
+          navigate('/login')
           return
         }
-        if (currentUser) { navigate('/dashboard'); return }
-        navigate('/login')
-        return
-      }
 
-      const { data: { user } } = await supabase.auth.getUser()
-      currentUser = user
+        const { data: { user } } = await supabase.auth.getUser()
+        currentUser = user
 
-      if (hash.startsWith('/u/')) {
-        const username = hash.slice(3)
-        renderPublicProfile(username)
-      } else if (hash === '/login' || hash === '/register') {
-        if (currentUser) { navigate('/dashboard'); return }
-        renderAuth(hash === '/register')
-      } else if (hash === '/dashboard') {
-        if (!currentUser) { navigate('/login'); return }
-        renderDashboard()
-      } else if (hash === '/forgot-password') {
-        if (currentUser) { navigate('/dashboard'); return }
-        renderForgotPassword()
-      } else {
-        navigate('/login')
-      }
+        if (hash.startsWith('/u/')) {
+          const username = hash.slice(3)
+          renderPublicProfile(username)
+        } else if (hash === '/login' || hash === '/register') {
+          if (currentUser) { navigate('/dashboard'); return }
+          renderAuth(hash === '/register')
+        } else if (hash === '/dashboard') {
+          if (!currentUser) { navigate('/login'); return }
+          renderDashboard()
+        } else if (hash === '/forgot-password') {
+          if (currentUser) { navigate('/dashboard'); return }
+          renderForgotPassword()
+        } else {
+          navigate('/login')
+        }
+      } catch(e) { showFatal(e.message) }
     }
 
     // ========== Render Auth ==========
@@ -301,36 +307,38 @@
         </div>`
 
       document.getElementById('auth-submit').onclick = async () => {
-        const email = document.getElementById('auth-email').value
-        const pass = document.getElementById('auth-password').value
-        const errEl = document.getElementById('auth-error')
-        errEl.textContent = ''
-        if (!email || !pass) { errEl.textContent = 'Fill in all fields'; return }
+        try {
+          const email = document.getElementById('auth-email').value
+          const pass = document.getElementById('auth-password').value
+          const errEl = document.getElementById('auth-error')
+          errEl.textContent = ''
+          if (!email || !pass) { errEl.textContent = 'Fill in all fields'; return }
 
-        if (isRegister) {
-          const username = document.getElementById('auth-username').value
-          if (!username || !/^[a-z0-9_]{3,20}$/.test(username)) {
-            errEl.textContent = 'Username: 3-20 chars, lowercase, numbers, underscore'
-            return
+          if (isRegister) {
+            const username = document.getElementById('auth-username').value
+            if (!username || !/^[a-z0-9_]{3,20}$/.test(username)) {
+              errEl.textContent = 'Username: 3-20 chars, lowercase, numbers, underscore'
+              return
+            }
+            document.getElementById('auth-submit').disabled = true
+            document.getElementById('auth-submit').textContent = 'Creating...'
+            const { data, error } = await supabase.auth.signUp({ email, password: pass })
+            if (error) { errEl.textContent = error.message; document.getElementById('auth-submit').disabled = false; document.getElementById('auth-submit').textContent = 'Create Account'; return }
+            if (!data.user) { errEl.textContent = 'Signup failed - no user returned'; document.getElementById('auth-submit').disabled = false; document.getElementById('auth-submit').textContent = 'Create Account'; return }
+            const { error: profErr } = await supabase.from('profiles').insert({
+              id: data.user.id, username: username,
+              page_data: getDefaultData()
+            })
+            if (profErr) { errEl.textContent = profErr.message; document.getElementById('auth-submit').disabled = false; document.getElementById('auth-submit').textContent = 'Create Account'; return }
+            navigate('/dashboard')
+          } else {
+            document.getElementById('auth-submit').disabled = true
+            document.getElementById('auth-submit').textContent = 'Signing in...'
+            const { data, error } = await supabase.auth.signInWithPassword({ email, password: pass })
+            if (error) { errEl.textContent = error.message; document.getElementById('auth-submit').disabled = false; document.getElementById('auth-submit').textContent = 'Sign In'; return }
+            navigate('/dashboard')
           }
-          document.getElementById('auth-submit').disabled = true
-          document.getElementById('auth-submit').textContent = 'Creating...'
-          const { data, error } = await supabase.auth.signUp({ email, password: pass })
-          if (error) { errEl.textContent = error.message; document.getElementById('auth-submit').disabled = false; document.getElementById('auth-submit').textContent = 'Create Account'; return }
-          // Insert profile
-          const { error: profErr } = await supabase.from('profiles').insert({
-            id: data.user.id, username: username,
-            page_data: getDefaultData()
-          })
-          if (profErr) { errEl.textContent = profErr.message; document.getElementById('auth-submit').disabled = false; document.getElementById('auth-submit').textContent = 'Create Account'; return }
-          navigate('/dashboard')
-        } else {
-          document.getElementById('auth-submit').disabled = true
-          document.getElementById('auth-submit').textContent = 'Signing in...'
-          const { data, error } = await supabase.auth.signInWithPassword({ email, password: pass })
-          if (error) { errEl.textContent = error.message; document.getElementById('auth-submit').disabled = false; document.getElementById('auth-submit').textContent = 'Sign In'; return }
-          navigate('/dashboard')
-        }
+        } catch(e) { document.getElementById('auth-error').textContent = 'Error: ' + e.message; document.getElementById('auth-submit').disabled = false; document.getElementById('auth-submit').textContent = isRegister ? 'Create Account' : 'Sign In' }
       }
 
       if (isRegister) {
