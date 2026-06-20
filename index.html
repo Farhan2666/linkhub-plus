@@ -233,6 +233,23 @@
     async function route() {
       const hash = getHash()
       currentRoute = hash
+
+      if (hash.includes('type=recovery') || hash.includes('access_token')) {
+        var p = new URLSearchParams(hash)
+        var at = p.get('access_token')
+        var rt = p.get('refresh_token')
+        if (at) await supabase.auth.setSession({ access_token: at, refresh_token: rt })
+        const { data: { user } } = await supabase.auth.getUser()
+        currentUser = user
+        if (hash.includes('type=recovery') && user) {
+          renderResetPassword()
+          return
+        }
+        if (currentUser) { navigate('/dashboard'); return }
+        navigate('/login')
+        return
+      }
+
       const { data: { user } } = await supabase.auth.getUser()
       currentUser = user
 
@@ -245,6 +262,9 @@
       } else if (hash === '/dashboard') {
         if (!currentUser) { navigate('/login'); return }
         renderDashboard()
+      } else if (hash === '/forgot-password') {
+        if (currentUser) { navigate('/dashboard'); return }
+        renderForgotPassword()
       } else {
         navigate('/login')
       }
@@ -257,6 +277,7 @@
       const toggle = isRegister
         ? "Already have an account? <a onclick=\"route()\">Sign in</a>"
         : "Don't have an account? <a onclick=\"navigate('/register')\">Create one</a>"
+      const extraLink = isRegister ? '' : '<div style="margin-top:4px"><a onclick="navigate(\'/forgot-password\')" style="color:var(--text-secondary);font-size:12px;cursor:pointer">Forgot password?</a></div>'
       const usernameField = isRegister
         ? '<div class="auth-username-row"><input class="auth-input" id="auth-username" type="text" placeholder="username" style="margin-bottom:0" /><span>.linkhub.page</span></div><div style="margin-bottom:14px"></div>'
         : ''
@@ -275,7 +296,7 @@
             <button class="auth-btn" id="auth-submit" style="background:linear-gradient(135deg,var(--accent-1),var(--accent-2))">
               ${isRegister ? 'Create Account' : 'Sign In'}
             </button>
-            <div class="auth-link">${toggle}</div>
+            <div class="auth-link">${toggle}${extraLink}</div>
           </div>
         </div>`
 
@@ -316,6 +337,70 @@
         document.getElementById('auth-username').oninput = function() {
           this.value = this.value.toLowerCase().replace(/[^a-z0-9_]/g, '')
         }
+      }
+    }
+
+    // ========== Forgot Password ==========
+    function renderForgotPassword() {
+      document.getElementById('root').innerHTML = `
+        <div id="bg-overlay" style="position:fixed;inset:0;z-index:0;background:linear-gradient(135deg,var(--accent-1),var(--accent-2))"></div>
+        <div class="auth-page">
+          <div class="auth-card animate-slide-in">
+            <h1>Reset Password</h1>
+            <p>Enter your email and we'll send you a reset link</p>
+            <div class="auth-error" id="auth-error"></div>
+            <div class="auth-success" id="auth-success"></div>
+            <input class="auth-input" id="reset-email" type="email" placeholder="Email" autocomplete="email" />
+            <button class="auth-btn" id="reset-submit" style="background:linear-gradient(135deg,var(--accent-1),var(--accent-2))">Send Reset Link</button>
+            <div class="auth-link"><a onclick="navigate('/login')">Back to sign in</a></div>
+          </div>
+        </div>`
+
+      document.getElementById('reset-submit').onclick = async () => {
+        const email = document.getElementById('reset-email').value
+        const errEl = document.getElementById('auth-error')
+        const sucEl = document.getElementById('auth-success')
+        errEl.textContent = ''; sucEl.textContent = ''
+        if (!email) { errEl.textContent = 'Enter your email'; return }
+        document.getElementById('reset-submit').disabled = true
+        document.getElementById('reset-submit').textContent = 'Sending...'
+        const { error } = await supabase.auth.resetPasswordForEmail(email, {
+          redirectTo: window.location.origin
+        })
+        if (error) { errEl.textContent = error.message; document.getElementById('reset-submit').disabled = false; document.getElementById('reset-submit').textContent = 'Send Reset Link'; return }
+        sucEl.textContent = 'Check your email for the reset link!'
+        document.getElementById('reset-submit').textContent = 'Sent'
+      }
+    }
+
+    function renderResetPassword() {
+      document.getElementById('root').innerHTML = `
+        <div id="bg-overlay" style="position:fixed;inset:0;z-index:0;background:linear-gradient(135deg,var(--accent-1),var(--accent-2))"></div>
+        <div class="auth-page">
+          <div class="auth-card animate-slide-in">
+            <h1>Set New Password</h1>
+            <p>Enter your new password</p>
+            <div class="auth-error" id="auth-error"></div>
+            <div class="auth-success" id="auth-success"></div>
+            <input class="auth-input" id="new-password" type="password" placeholder="New password" autocomplete="new-password" />
+            <button class="auth-btn" id="reset-confirm" style="background:linear-gradient(135deg,var(--accent-1),var(--accent-2))">Update Password</button>
+            <div class="auth-link"><a onclick="navigate('/login')">Back to sign in</a></div>
+          </div>
+        </div>`
+
+      document.getElementById('reset-confirm').onclick = async () => {
+        const pass = document.getElementById('new-password').value
+        const errEl = document.getElementById('auth-error')
+        const sucEl = document.getElementById('auth-success')
+        errEl.textContent = ''; sucEl.textContent = ''
+        if (!pass || pass.length < 6) { errEl.textContent = 'Password must be at least 6 characters'; return }
+        document.getElementById('reset-confirm').disabled = true
+        document.getElementById('reset-confirm').textContent = 'Updating...'
+        const { error } = await supabase.auth.updateUser({ password: pass })
+        if (error) { errEl.textContent = error.message; document.getElementById('reset-confirm').disabled = false; document.getElementById('reset-confirm').textContent = 'Update Password'; return }
+        sucEl.textContent = 'Password updated! Redirecting...'
+        await supabase.auth.signOut()
+        setTimeout(function() { navigate('/login') }, 1500)
       }
     }
 
@@ -484,7 +569,8 @@
         +'<div class="customizer-header"><h2>Edit Page</h2><button class="customizer-close" onclick="closeCustomizer()"><svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg></button></div>'
 
         +'<div class="cz-section"><div class="cz-section-title">Profile</div>'
-        +'<div class="cz-field"><label>Avatar URL</label><input type="text" value="'+esc(d.profile.avatar)+'" oninput="updateProfile(\'avatar\',this.value)" placeholder="https://..." /></div>'
+        +'<div class="cz-field"><label>Photo</label><div class="cz-row"><input type="text" value="'+esc(d.profile.avatar)+'" oninput="updateProfile(\'avatar\',this.value)" placeholder="URL or data:..." style="flex:1" />'
+        +'<label style="padding:8px 12px;border-radius:10px;font-size:12px;background:rgba(255,255,255,0.06);border:1px solid var(--border-color);cursor:pointer;white-space:nowrap">Upload<input type="file" accept="image/*" onchange="uploadAvatar(this)" style="display:none"></label></div></div>'
         +'<div class="cz-field"><label>Name</label><input type="text" value="'+esc(d.profile.name)+'" oninput="updateProfile(\'name\',this.value)" /></div>'
         +'<div class="cz-field"><label>Bio</label><input type="text" value="'+esc(d.profile.bio)+'" oninput="updateProfile(\'bio\',this.value)" /></div>'
         +'<div class="cz-field"><label>Status</label><input type="text" value="'+esc(d.profile.status||'')+'" oninput="updateProfile(\'status\',this.value)" placeholder="e.g. open to work" /></div>'
@@ -522,6 +608,15 @@
     }
 
     // Mutation handlers
+    window.uploadAvatar = function(input) {
+      var file = input.files[0]
+      if (!file) return
+      if (file.size > 2097152) { alert('Image too large. Max 2MB.'); return }
+      var reader = new FileReader()
+      reader.onload = function(e) { dashData.profile.avatar = e.target.result; saveDashData(); renderCustomizerPage(dashData) }
+      reader.readAsDataURL(file)
+      input.value = ''
+    }
     window.updateProfile = function(field, val) { dashData.profile[field] = val; saveDashData(); renderCustomizerPage(dashData) }
     window.updateTheme = function(field, val) { dashData.theme[field] = val; saveDashData(); renderCustomizerPage(dashData) }
     window.updateBgType = function(t) { dashData.theme.bgType = t; saveDashData(); renderCustomizerPage(dashData) }
