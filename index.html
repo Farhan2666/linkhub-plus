@@ -381,6 +381,10 @@
           return
         }
 
+        // Remove bg-overlay from previous page
+        var prevOverlay = document.getElementById('bg-overlay')
+        if (prevOverlay) prevOverlay.remove()
+
         var authRes
         try { authRes = await getUserWithTimeout(5000) } catch(e) { authRes = { data: { user: null } } }
         var user = authRes.data.user
@@ -559,7 +563,7 @@
           { platform: 'Twitter', url: 'https://twitter.com', icon: 'twitter' },
           { platform: 'GitHub', url: 'https://github.com', icon: 'github' },
         ],
-        theme: { bgType: 'gradient', primaryColor: '#5D34D0', secondaryColor: '#FF006E', accentColor: '#00F0FF', cardOpacity: 0.06, cardBlur: 12, glowIntensity: 1, solidColor: '#0a0014', particleColor: '#FF006E', particleCount: 50 }
+        theme: { bgType: 'gradient', primaryColor: '#5D34D0', secondaryColor: '#FF006E', accentColor: '#00F0FF', cardOpacity: 0.06, cardBlur: 12, glowIntensity: 1, solidColor: '#0a0014', particleColor: '#FF006E', particleCount: 50, bgImage: '', patternType: 'diagonal', patternColor: '#ffffff' }
       }
     }
 
@@ -688,7 +692,7 @@
     // ========== Dashboard Customizer ==========
     window.openDashCustomizer = function() {
       const d = dashData
-      var bgTypes = ['gradient','solid','particle']
+      var bgTypes = ['gradient','solid','particle','image','pattern']
 
       var linksEditHtml = d.links.map(function(link, idx) {
         return '<div class="cz-link-item" draggable="true" data-link-id="'+link.id+'"'
@@ -737,9 +741,16 @@
           +'<div class="cz-field"><label>Accent</label><div class="cz-row"><input type="color" value="'+d.theme.accentColor+'" oninput="updateTheme(\'accentColor\',this.value)" /><input type="text" value="'+d.theme.accentColor+'" oninput="updateTheme(\'accentColor\',this.value)" style="font-family:monospace;font-size:12px;flex:1" /></div></div>':'')
         +(d.theme.bgType==='solid'
           ?'<div class="cz-field"><label>Color</label><div class="cz-row"><input type="color" value="'+d.theme.solidColor+'" oninput="updateTheme(\'solidColor\',this.value)" /><input type="text" value="'+d.theme.solidColor+'" oninput="updateTheme(\'solidColor\',this.value)" style="font-family:monospace;font-size:12px;flex:1" /></div></div>':'')
-        +(d.theme.bgType==='particle'
+         +(d.theme.bgType==='particle'
           ?'<div class="cz-field"><label>Particle Color</label><div class="cz-row"><input type="color" value="'+d.theme.particleColor+'" oninput="updateTheme(\'particleColor\',this.value)" /><input type="text" value="'+d.theme.particleColor+'" oninput="updateTheme(\'particleColor\',this.value)" style="font-family:monospace;font-size:12px;flex:1" /></div></div>'
           +'<div class="cz-field"><label>Count: '+d.theme.particleCount+'</label><input type="range" min="10" max="200" value="'+d.theme.particleCount+'" oninput="updateTheme(\'particleCount\',Number(this.value))" /></div>':'')
+        +(d.theme.bgType==='image'
+          ?'<div class="cz-field"><label>Image URL</label><input type="url" value="'+esc(d.theme.bgImage||'')+'" oninput="updateTheme(\'bgImage\',this.value)" placeholder="https://example.com/image.jpg" /></div>':'')
+        +(d.theme.bgType==='pattern'
+          ?'<div class="cz-field"><label>Pattern</label><div class="cz-bg-type-row">'
+          +['diagonal','dots','grid'].map(function(p){return '<button class="cz-bg-type-btn'+(d.theme.patternType===p?' active':'')+'" onclick="updateTheme(\'patternType\',\''+p+'\')">'+p.charAt(0).toUpperCase()+p.slice(1)+'</button>'}).join('')
+          +'</div></div>'
+          +'<div class="cz-field"><label>Pattern Color</label><div class="cz-row"><input type="color" value="'+(d.theme.patternColor||'#ffffff')+'" oninput="updateTheme(\'patternColor\',this.value)" /><input type="text" value="'+(d.theme.patternColor||'#ffffff')+'" oninput="updateTheme(\'patternColor\',this.value)" style="font-family:monospace;font-size:12px;flex:1" /></div></div>':'')
         +'<div class="cz-field"><label>Card Opacity: '+Math.round(d.theme.cardOpacity*100)+'%</label><input type="range" min="0" max="20" value="'+Math.round(d.theme.cardOpacity*100)+'" oninput="updateTheme(\'cardOpacity\',Number(this.value)/100)" /></div>'
         +'<div class="cz-field"><label>Blur: '+d.theme.cardBlur+'px</label><input type="range" min="0" max="24" value="'+d.theme.cardBlur+'" oninput="updateTheme(\'cardBlur\',Number(this.value))" /></div>'
         +'<div class="cz-field"><label>Glow: '+d.theme.glowIntensity.toFixed(1)+'x</label><input type="range" min="0" max="3" step="0.1" value="'+d.theme.glowIntensity+'" oninput="updateTheme(\'glowIntensity\',Number(this.value))" /></div></div>'
@@ -901,7 +912,7 @@
         : ''
 
       root.innerHTML =
-        '<div style="min-height:100vh;display:flex;flex-direction:column">'
+        '<div style="min-height:100vh;display:flex;flex-direction:column;position:relative;z-index:1">'
         +'<div class="profile-section">'
           +'<div class="avatar-ring">'+avatarInner+'</div>'
           +'<h1 class="profile-name">'+esc(d.profile.name)+'</h1>'
@@ -919,7 +930,21 @@
     }
 
     // ========== Helpers ==========
+    function getBgStyle(t) {
+      if (t.bgType === 'gradient') return 'linear-gradient(135deg, ' + t.primaryColor + ', ' + t.secondaryColor + ')'
+      if (t.bgType === 'solid') return t.solidColor
+      if (t.bgType === 'particle') return t.solidColor
+      if (t.bgType === 'image' && t.bgImage) return 'url(' + esc(t.bgImage) + ') center/cover no-repeat'
+      if (t.bgType === 'pattern') {
+        var pc = t.patternColor || '#ffffff'
+        if (t.patternType === 'diagonal') return 'repeating-linear-gradient(45deg, transparent 0px, transparent 15px, ' + pc + ' 15px, ' + pc + ' 16px)'
+        if (t.patternType === 'dots') return 'radial-gradient(circle, ' + pc + ' 1px, transparent 1px)'
+        if (t.patternType === 'grid') return 'linear-gradient(90deg, ' + pc + ' 1px, transparent 1px), linear-gradient(' + pc + ' 1px, transparent 1px)'
+      }
+      return t.solidColor
+    }
     function applyTheme(t) {
+      if (!t) return
       const root = document.documentElement
       root.style.setProperty('--accent-1', t.primaryColor)
       root.style.setProperty('--accent-2', t.secondaryColor)
@@ -928,10 +953,20 @@
       root.style.setProperty('--card-opacity', String(t.cardOpacity))
       root.style.setProperty('--card-blur', t.cardBlur + 'px')
       root.style.setProperty('--glow-intensity', String(t.glowIntensity))
-      const overlay = document.getElementById('bg-overlay')
-      if (overlay) overlay.style.background = t.bgType === 'gradient'
-        ? 'linear-gradient(135deg, ' + t.primaryColor + ', ' + t.secondaryColor + ')'
-        : t.solidColor
+      var bg = getBgStyle(t)
+      var overlay = document.getElementById('bg-overlay')
+      if (!overlay) {
+        overlay = document.createElement('div')
+        overlay.id = 'bg-overlay'
+        overlay.style.cssText = 'position:fixed;inset:0;z-index:0;pointer-events:none;transition:background .5s'
+        var canv = document.getElementById('canvas-bg')
+        if (canv) document.body.insertBefore(overlay, canv)
+        else document.body.prepend(overlay)
+      }
+      overlay.style.background = bg
+      if (t.bgType === 'pattern' && (t.patternType === 'dots' || t.patternType === 'grid')) overlay.style.backgroundSize = '20px 20px'
+      else overlay.style.backgroundSize = ''
+      document.body.style.background = ''
     }
 
     function esc(str) { var d = document.createElement('div'); d.textContent = str; return d.innerHTML }
