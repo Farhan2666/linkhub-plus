@@ -9,6 +9,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,400;14..32,500;14..32,600;14..32,700&display=swap" rel="stylesheet" />
   <style>
     *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+    :focus-visible { outline: 2px solid var(--accent-3); outline-offset: 2px; }
     :root {
       --bg-primary: #0a0014; --bg-card: rgba(255,255,255,0.06);
       --text-primary: #ffffff; --text-secondary: rgba(255,255,255,0.6);
@@ -214,20 +215,46 @@
 
     // ========== Supabase REST client (no CDN) ==========
     function getToken() { return localStorage.getItem('supa_token') || '' }
-    function setToken(t) { if (t) localStorage.setItem('supa_token', t); else localStorage.removeItem('supa_token') }
+    function getRefreshToken() { return localStorage.getItem('supa_refresh_token') || '' }
+    function setTokens(at, rt) {
+      if (at) localStorage.setItem('supa_token', at); else localStorage.removeItem('supa_token')
+      if (rt) localStorage.setItem('supa_refresh_token', rt); else localStorage.removeItem('supa_refresh_token')
+    }
+    function clearTokens() { localStorage.removeItem('supa_token'); localStorage.removeItem('supa_refresh_token') }
+
+    var refreshingToken = null
+    function tryRefresh() {
+      if (refreshingToken) return refreshingToken
+      var rt = getRefreshToken()
+      if (!rt) { return Promise.reject(new Error('No refresh token')) }
+      refreshingToken = fetch(SUPABASE_URL + '/auth/v1/token?grant_type=refresh_token', {
+        method: 'POST',
+        headers: { 'apikey': SUPABASE_ANON_KEY, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ refresh_token: rt })
+      }).then(function(r) { return r.json() }).then(function(d) {
+        if (d.access_token) { setTokens(d.access_token, d.refresh_token); return d.access_token }
+        throw new Error('Refresh failed')
+      }).finally(function() { refreshingToken = null })
+      return refreshingToken
+    }
 
     function authFetch(path, opts) {
-      var headers = { 'apikey': SUPABASE_ANON_KEY, 'Content-Type': 'application/json' }
-      if (opts && opts.auth !== false) {
-        var tok = getToken()
-        if (tok) headers['Authorization'] = 'Bearer ' + tok
-      }
-      return fetch(SUPABASE_URL + path, { headers: headers, ...(opts||{}) }).then(function(r) {
-        if (r.status === 204) return null
-        return r.json().then(function(d) {
-          if (r.status >= 400) throw new Error(d.msg || d.message || d.error_description || d.error || 'HTTP ' + r.status)
-          return d
+      function makeReq(tok) {
+        var hdrs = { 'apikey': SUPABASE_ANON_KEY, 'Content-Type': 'application/json' }
+        if (opts && opts.auth !== false && tok) hdrs['Authorization'] = 'Bearer ' + tok
+        return fetch(SUPABASE_URL + path, { headers: hdrs, ...(opts||{}) }).then(function(r) {
+          if (r.status === 204) return null
+          return r.json().then(function(d) {
+            if (r.status >= 400) throw new Error(d.msg || d.message || d.error_description || d.error || 'HTTP ' + r.status)
+            return d
+          })
         })
+      }
+      return makeReq(getToken()).catch(function(err) {
+        if (err.message.includes('401') || err.message.includes('JWT')) {
+          return tryRefresh().then(makeReq)
+        }
+        throw err
       })
     }
 
@@ -235,13 +262,13 @@
       auth: {
         signUp: function(creds) {
           return authFetch('/auth/v1/signup', { method: 'POST', body: JSON.stringify(creds) }).then(function(d) {
-            if (d.access_token) setToken(d.access_token)
+            if (d.access_token) setTokens(d.access_token, d.refresh_token)
             return { data: { user: d.user, session: d }, error: null }
           }).catch(function(e) { return { data: { user: null, session: null }, error: e } })
         },
         signInWithPassword: function(creds) {
           return authFetch('/auth/v1/token?grant_type=password', { method: 'POST', auth: false, body: JSON.stringify(creds) }).then(function(d) {
-            if (d.access_token) setToken(d.access_token)
+            if (d.access_token) setTokens(d.access_token, d.refresh_token)
             return { data: { user: d.user, session: d }, error: null }
           }).catch(function(e) { return { data: { user: null, session: null }, error: e } })
         },
@@ -251,10 +278,10 @@
           }).catch(function(e) { return { data: { user: null }, error: e } })
         },
         setSession: function(sesh) {
-          if (sesh && sesh.access_token) setToken(sesh.access_token)
+          if (sesh && sesh.access_token) setTokens(sesh.access_token, sesh.refresh_token)
         },
         signOut: function() {
-          return authFetch('/auth/v1/logout', { method: 'POST' }).then(function() { setToken(null) }).catch(function() { setToken(null) })
+          return authFetch('/auth/v1/logout', { method: 'POST' }).then(function() { clearTokens() }).catch(function() { clearTokens() })
         },
         resetPasswordForEmail: function(email, opts) {
           return authFetch('/auth/v1/recover', { method: 'POST', auth: false, body: JSON.stringify({ email }) })
@@ -307,7 +334,6 @@
     }
 
     window.addEventListener('hashchange', route)
-    window.route = navigate
 
     function getHash() { return window.location.hash.slice(1) || '/login' }
 
@@ -328,6 +354,7 @@
       try {
         const hash = getHash()
         currentRoute = hash
+        document.title = 'LinkHub+'
 
         if (hash.includes('type=recovery') || hash.includes('access_token')) {
           var p = new URLSearchParams(hash)
@@ -375,7 +402,7 @@
       const title = isRegister ? 'Create Account' : 'Welcome Back'
       const subtitle = isRegister ? 'Create your LinkHub+ page' : 'Sign in to your dashboard'
       const toggle = isRegister
-        ? "Already have an account? <a onclick=\"route()\">Sign in</a>"
+        ? "Already have an account? <a onclick=\"navigate('/login')\">Sign in</a>"
         : "Don't have an account? <a onclick=\"navigate('/register')\">Create one</a>"
       const extraLink = isRegister ? '' : '<div style="margin-top:4px"><a onclick="navigate(\'/forgot-password\')" style="color:var(--text-secondary);font-size:12px;cursor:pointer">Forgot password?</a></div>'
       const usernameField = isRegister
@@ -417,6 +444,9 @@
               return
             }
             document.getElementById('auth-submit').disabled = true
+            document.getElementById('auth-submit').textContent = 'Checking...'
+            const { data: existing } = await supa.from('profiles').select('username').eq('username', username).maybeSingle()
+            if (existing) { errEl.textContent = 'Username already taken'; document.getElementById('auth-submit').disabled = false; document.getElementById('auth-submit').textContent = 'Create Account'; return }
             document.getElementById('auth-submit').textContent = 'Creating...'
             const { data, error } = await supa.auth.signUp({ email, password: pass })
             if (error) { errEl.textContent = error.message; document.getElementById('auth-submit').disabled = false; document.getElementById('auth-submit').textContent = 'Create Account'; return }
@@ -546,8 +576,9 @@
         </div>`
 
       // Fetch profile
-      const { data: prof, error } = await supa.from('profiles').select('*').eq('id', currentUser.id).single()
-      if (error) {
+      const { data: prof, error } = await supa.from('profiles').select('*').eq('id', currentUser.id).maybeSingle()
+      if (error) { root.innerHTML = '<p style="padding:40px;color:#f87171">Error loading profile</p>'; return }
+      if (!prof) {
         // Create if not exists
         const username = currentUser.email.split('@')[0].replace(/[^a-z0-9_]/g, '').slice(0, 20)
         const { data: newProf, error: insErr } = await supa.from('profiles').insert({
@@ -567,10 +598,15 @@
       renderCustomizerPage(dashData)
     }
 
+    var saveTimer = null
     async function saveDashData() {
       if (!userProfile) return
-      const { error } = await supa.from('profiles').update({ page_data: dashData }).eq('id', currentUser.id)
-      if (error) console.error('Save error:', error)
+      if (saveTimer) clearTimeout(saveTimer)
+      saveTimer = setTimeout(async function() {
+        saveTimer = null
+        const { error } = await supa.from('profiles').update({ page_data: dashData }).eq('id', currentUser.id)
+        if (error) console.error('Save error:', error)
+      }, 500)
     }
 
     function renderCustomizerPage(d) {
@@ -590,26 +626,27 @@
       ck.forEach(function(cat) {
         if(cat) linksHtml += '<div class="link-category">' + esc(cat) + '</div>'
         cats[cat].forEach(function(link) {
-          var bs = link.color ? 'border-color:'+link.color+'50;' : ''
-          var gg = link.color ? 'background:linear-gradient(135deg,'+link.color+'15,transparent)' : ''
-          linksHtml += '<a href="'+esc(link.url)+'" target="_blank" rel="noopener noreferrer" class="link-card" style="animation-delay:'+(gi*.08)+'s;'+bs+'">'
+          var lc = link.color && isValidHex(link.color) ? link.color : ''
+          var bs = lc ? 'border-color:'+lc+'50;' : ''
+          var gg = lc ? 'background:linear-gradient(135deg,'+lc+'15,transparent)' : ''
+          linksHtml += '<a href="'+sanitizeUrl(link.url)+'" target="_blank" rel="noopener noreferrer" class="link-card" style="animation-delay:'+(gi*.08)+'s;'+bs+'">'
             +'<div class="link-card-glow" style="'+gg+'"></div>'
-            +(link.icon?'<span class="link-card-icon">'+link.icon+'</span>':'')
+            +(link.icon?'<span class="link-card-icon">'+esc(link.icon)+'</span>':'')
             +'<div class="link-card-body"><div class="link-card-title">'+esc(link.title)+'</div>'
             +(link.description?'<div class="link-card-desc">'+esc(link.description)+'</div>':'')+'</div>'
             +'<svg class="link-card-arrow" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>'
-            +'<div class="link-card-bar" style="'+(link.color?'background:'+link.color+';':'')+'"></div></a>'
+            +'<div class="link-card-bar" style="'+(lc?'background:'+lc+';':'')+'"></div></a>'
           gi++
         })
       })
 
       const socialsHtml = d.socials.map(function(s) {
         var svg = icons[s.icon] || ''
-        return '<a href="'+esc(s.url)+'" target="_blank" rel="noopener noreferrer" class="social-icon-btn">'+svg+'</a>'
+        return '<a href="'+sanitizeUrl(s.url)+'" target="_blank" rel="noopener noreferrer" class="social-icon-btn" aria-label="'+esc(s.platform)+'">'+svg+'</a>'
       }).join('')
 
       const statusHtml = d.profile.status && d.profile.status.trim()
-        ? '<div class="profile-status animate-float">'+(d.profile.statusEmoji?d.profile.statusEmoji+' ':'')+esc(d.profile.status)+'</div>'
+        ? '<div class="profile-status animate-float">'+(d.profile.statusEmoji?esc(d.profile.statusEmoji)+' ':'')+esc(d.profile.status)+'</div>'
         : ''
 
       root.innerHTML =
@@ -653,7 +690,7 @@
           +'<button class="cz-link-remove" onclick="removeLink(this)" data-link-id="'+link.id+'">Remove</button></div>'
           +'<div class="cz-field"><label>Title</label><input type="text" value="'+esc(link.title)+'" oninput="updateLink(\''+link.id+'\',\'title\',this.value)" /></div>'
           +'<div class="cz-field"><label>Description</label><input type="text" value="'+esc(link.description||'')+'" oninput="updateLink(\''+link.id+'\',\'description\',this.value)" placeholder="Brief project description" /></div>'
-          +'<div class="cz-field"><label>URL</label><input type="text" value="'+esc(link.url)+'" oninput="updateLink(\''+link.id+'\',\'url\',this.value)" /></div>'
+          +'<div class="cz-field"><label>URL</label><input type="url" value="'+esc(link.url)+'" oninput="updateLink(\''+link.id+'\',\'url\',this.value)" /></div>'
           +'<div class="cz-field"><label>Icon</label><input type="text" class="cz-short-input" value="'+esc(link.icon||'')+'" oninput="updateLink(\''+link.id+'\',\'icon\',this.value)" /></div>'
           +'<div class="cz-field"><label>Category</label><input type="text" value="'+esc(link.category||'')+'" oninput="updateLink(\''+link.id+'\',\'category\',this.value)" placeholder="e.g. Web Apps" /></div>'
           +'<div class="cz-field"><label>Color</label><div class="cz-row"><input type="color" value="'+(link.color||'#00F0FF')+'" oninput="updateLink(\''+link.id+'\',\'color\',this.value)" />'
@@ -662,7 +699,7 @@
 
       var socialsEditHtml = d.socials.map(function(s,i) {
         return '<div class="cz-link-item"><div class="cz-link-header"><span>'+esc(s.platform)+'</span></div>'
-          +'<div class="cz-field"><label>URL</label><input type="text" value="'+esc(s.url)+'" oninput="updateSocial('+i+',\'url\',this.value)" /></div></div>'
+          +'<div class="cz-field"><label>URL</label><input type="url" value="'+esc(s.url)+'" oninput="updateSocial('+i+',\'url\',this.value)" /></div></div>'
       }).join('')
 
       var panel = document.createElement('div')
@@ -797,6 +834,7 @@
 
       const d = prof.page_data
       if (!d) { root.innerHTML = '<p>No data</p>'; return }
+      document.title = d.profile.name + ' - LinkHub+'
       applyTheme(d.theme)
 
       // Particle canvas
@@ -823,26 +861,27 @@
       ck.forEach(function(cat) {
         if(cat) linksHtml += '<div class="link-category">'+esc(cat)+'</div>'
         cats[cat].forEach(function(link) {
-          var bs = link.color ? 'border-color:'+link.color+'50;' : ''
-          var gg = link.color ? 'background:linear-gradient(135deg,'+link.color+'15,transparent)' : ''
-          linksHtml += '<a href="'+esc(link.url)+'" target="_blank" rel="noopener noreferrer" class="link-card" style="animation-delay:'+(gi*.08)+'s;'+bs+'">'
+          var lc = link.color && isValidHex(link.color) ? link.color : ''
+          var bs = lc ? 'border-color:'+lc+'50;' : ''
+          var gg = lc ? 'background:linear-gradient(135deg,'+lc+'15,transparent)' : ''
+          linksHtml += '<a href="'+sanitizeUrl(link.url)+'" target="_blank" rel="noopener noreferrer" class="link-card" style="animation-delay:'+(gi*.08)+'s;'+bs+'">'
             +'<div class="link-card-glow" style="'+gg+'"></div>'
-            +(link.icon?'<span class="link-card-icon">'+link.icon+'</span>':'')
+            +(link.icon?'<span class="link-card-icon">'+esc(link.icon)+'</span>':'')
             +'<div class="link-card-body"><div class="link-card-title">'+esc(link.title)+'</div>'
             +(link.description?'<div class="link-card-desc">'+esc(link.description)+'</div>':'')+'</div>'
             +'<svg class="link-card-arrow" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>'
-            +'<div class="link-card-bar" style="'+(link.color?'background:'+link.color+';':'')+'"></div></a>'
+            +'<div class="link-card-bar" style="'+(lc?'background:'+lc+';':'')+'"></div></a>'
           gi++
         })
       })
 
       const socialsHtml = d.socials.map(function(s) {
         var svg = icons[s.icon] || ''
-        return '<a href="'+esc(s.url)+'" target="_blank" rel="noopener noreferrer" class="social-icon-btn">'+svg+'</a>'
+        return '<a href="'+sanitizeUrl(s.url)+'" target="_blank" rel="noopener noreferrer" class="social-icon-btn" aria-label="'+esc(s.platform)+'">'+svg+'</a>'
       }).join('')
 
       const statusHtml = d.profile.status && d.profile.status.trim()
-        ? '<div class="profile-status animate-float">'+(d.profile.statusEmoji?d.profile.statusEmoji+' ':'')+esc(d.profile.status)+'</div>'
+        ? '<div class="profile-status animate-float">'+(d.profile.statusEmoji?esc(d.profile.statusEmoji)+' ':'')+esc(d.profile.status)+'</div>'
         : ''
 
       root.innerHTML =
@@ -880,6 +919,10 @@
     }
 
     function esc(str) { var d = document.createElement('div'); d.textContent = str; return d.innerHTML }
+    function isValidHex(c) { return /^#[0-9a-fA-F]{6}$/.test(c) }
+    function sanitizeUrl(url) {
+      try { var u = new URL(url); return ['http:','https:','mailto:','tel:'].includes(u.protocol) ? url : '#' } catch(e) { return '#' }
+    }
 
     // Particles
     var particlesState = { particles: [], mouseX: -1000, mouseY: -1000, animId: null }
