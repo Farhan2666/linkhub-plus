@@ -212,31 +212,90 @@
     const SUPABASE_URL = 'https://rnbfzfwkxxdpixhvilnx.supabase.co'
     const SUPABASE_ANON_KEY = 'sb_publishable_FiSWuZYttL-vyXLqz5B99g_EVT-qxP_'
 
-    let supabase = null
-    let CDNLoaded = false
+    // ========== Supabase REST client (no CDN) ==========
+    function getToken() { return localStorage.getItem('supa_token') || '' }
+    function setToken(t) { if (t) localStorage.setItem('supa_token', t); else localStorage.removeItem('supa_token') }
 
-    function loadCDN() {
-      return new Promise(function(resolve, reject) {
-        var s = document.createElement('script')
-        s.src = 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js'
-        s.onload = function() { CDNLoaded = true; resolve() }
-        s.onerror = function() { reject(new Error('CDN failed to load')) }
-        document.head.appendChild(s)
+    function authFetch(path, opts) {
+      var headers = { 'apikey': SUPABASE_ANON_KEY, 'Content-Type': 'application/json' }
+      if (opts && opts.auth !== false) {
+        var tok = getToken()
+        if (tok) headers['Authorization'] = 'Bearer ' + tok
+      }
+      return fetch(SUPABASE_URL + path, { headers: headers, ...(opts||{}) }).then(function(r) {
+        return r.json().then(function(d) {
+          if (r.status >= 400) throw new Error(d.msg || d.message || d.error_description || d.error || 'HTTP ' + r.status)
+          return d
+        })
       })
     }
 
-    // Load CDN with 10s timeout — page stays interactive while loading
-    Promise.race([
-      loadCDN(),
-      new Promise(function(_, reject) {
-        setTimeout(function() { reject(new Error('CDN timeout (10s)')) }, 10000)
-      })
-    ]).then(function() {
-      supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
-      bootApp()
-    }).catch(function(err) {
-      document.getElementById('root').innerHTML = '<div style="padding:40px;color:#f87171;text-align:center;font-family:sans-serif"><h2>Connection Error</h2><p style="margin-top:12px;font-size:14px">'+err.message.replace(/</g,'&lt;')+'</p><p style="margin-top:8px;font-size:12px;color:var(--text-secondary)">Try refreshing, disable ad blocker, or use Chrome/Firefox</p></div>'
-    })
+    var supa = {
+      auth: {
+        signUp: function(creds) {
+          return authFetch('/auth/v1/signup', { method: 'POST', body: JSON.stringify(creds) }).then(function(d) {
+            if (d.access_token) setToken(d.access_token)
+            return { data: { user: d.user, session: d }, error: null }
+          }).catch(function(e) { return { data: { user: null, session: null }, error: e } })
+        },
+        signInWithPassword: function(creds) {
+          return authFetch('/auth/v1/token?grant_type=password', { method: 'POST', auth: false, body: JSON.stringify(creds) }).then(function(d) {
+            if (d.access_token) setToken(d.access_token)
+            return { data: { user: d.user, session: d }, error: null }
+          }).catch(function(e) { return { data: { user: null, session: null }, error: e } })
+        },
+        getUser: function() {
+          return authFetch('/auth/v1/user', { method: 'GET' }).then(function(d) {
+            return { data: { user: d }, error: null }
+          }).catch(function(e) { return { data: { user: null }, error: e } })
+        },
+        setSession: function(sesh) {
+          if (sesh && sesh.access_token) setToken(sesh.access_token)
+        },
+        signOut: function() {
+          return authFetch('/auth/v1/logout', { method: 'POST' }).then(function() { setToken(null) }).catch(function() { setToken(null) })
+        },
+        resetPasswordForEmail: function(email, opts) {
+          return authFetch('/auth/v1/recover', { method: 'POST', auth: false, body: JSON.stringify({ email }) })
+            .then(function() { return { data: {}, error: null } })
+            .catch(function(e) { return { error: e } })
+        },
+        updateUser: function(data) {
+          return authFetch('/auth/v1/user', { method: 'PUT', body: JSON.stringify(data) }).then(function(d) {
+            return { data: { user: d }, error: null }
+          }).catch(function(e) { return { data: { user: null }, error: e } })
+        }
+      },
+      from: function(table) {
+        var q = { filters: [], method: 'GET', body: null, singleMode: false, maybeMode: false }
+        function exec() {
+          var url = SUPABASE_URL + '/rest/v1/' + table
+          if (q.filters.length) url += '?' + q.filters.join('&')
+          var headers = { 'apikey': SUPABASE_ANON_KEY, 'Content-Type': 'application/json' }
+          var tok = getToken()
+          if (tok) headers['Authorization'] = 'Bearer ' + tok
+          if (q.method !== 'GET') headers['Prefer'] = 'return=representation'
+          return fetch(url, { method: q.method, headers: headers, body: q.body ? JSON.stringify(q.body) : null })
+            .then(function(r) {
+              if (r.status === 204) return null
+              return r.json().then(function(d) {
+                if (!r.ok) throw new Error(d.message || 'HTTP ' + r.status)
+                return d
+              })
+            })
+        }
+        return {
+          select: function() { q.method = 'GET'; return this },
+          insert: function(v) { q.method = 'POST'; q.body = v; return this },
+          update: function(v) { q.method = 'PATCH'; q.body = v; return this },
+          eq: function(col, val) { q.filters.push(col + '=eq.' + encodeURIComponent(val)); return this },
+          single: function() { q.singleMode = true; return exec().then(function(d) { return { data: d || null, error: null } }).catch(function(e) { return { data: null, error: e } }) },
+          maybeSingle: function() { q.maybeMode = true; return exec().then(function(d) { return { data: Array.isArray(d) ? d[0] || null : d || null, error: null } }).catch(function(e) { return { data: null, error: e } }) }
+        }
+      }
+    }
+
+    bootApp()
 
     // ========== App State ==========
     let currentUser = null
@@ -248,7 +307,7 @@
       window.location.hash = hash
     }
 
-    window.addEventListener('hashchange', function() { if (supabase) route() })
+    window.addEventListener('hashchange', route)
     window.route = navigate
 
     function getHash() { return window.location.hash.slice(1) || '/login' }
@@ -259,7 +318,7 @@
 
     async function getUserWithTimeout(timeoutMs) {
       return Promise.race([
-        supabase.auth.getUser(),
+        supa.auth.getUser(),
         new Promise(function(_, reject) {
           setTimeout(function() { reject(new Error('Auth check timed out')) }, timeoutMs)
         })
@@ -275,7 +334,7 @@
           var p = new URLSearchParams(hash)
           var at = p.get('access_token')
           var rt = p.get('refresh_token')
-          if (at) await supabase.auth.setSession({ access_token: at, refresh_token: rt })
+          if (at) await supa.auth.setSession({ access_token: at, refresh_token: rt })
           var authRes
           try { authRes = await getUserWithTimeout(5000) } catch(e) { authRes = { data: { user: null } } }
           var user = authRes.data.user
@@ -360,10 +419,10 @@
             }
             document.getElementById('auth-submit').disabled = true
             document.getElementById('auth-submit').textContent = 'Creating...'
-            const { data, error } = await supabase.auth.signUp({ email, password: pass })
+            const { data, error } = await supa.auth.signUp({ email, password: pass })
             if (error) { errEl.textContent = error.message; document.getElementById('auth-submit').disabled = false; document.getElementById('auth-submit').textContent = 'Create Account'; return }
             if (!data.user) { errEl.textContent = 'Signup failed - no user returned'; document.getElementById('auth-submit').disabled = false; document.getElementById('auth-submit').textContent = 'Create Account'; return }
-            const { error: profErr } = await supabase.from('profiles').insert({
+            const { error: profErr } = await supa.from('profiles').insert({
               id: data.user.id, username: username,
               page_data: getDefaultData()
             })
@@ -372,7 +431,7 @@
           } else {
             document.getElementById('auth-submit').disabled = true
             document.getElementById('auth-submit').textContent = 'Signing in...'
-            const { data, error } = await supabase.auth.signInWithPassword({ email, password: pass })
+            const { data, error } = await supa.auth.signInWithPassword({ email, password: pass })
             if (error) { errEl.textContent = error.message; document.getElementById('auth-submit').disabled = false; document.getElementById('auth-submit').textContent = 'Sign In'; return }
             navigate('/dashboard')
           }
@@ -410,7 +469,7 @@
         if (!email) { errEl.textContent = 'Enter your email'; return }
         document.getElementById('reset-submit').disabled = true
         document.getElementById('reset-submit').textContent = 'Sending...'
-        const { error } = await supabase.auth.resetPasswordForEmail(email, {
+        const { error } = await supa.auth.resetPasswordForEmail(email, {
           redirectTo: window.location.origin
         })
         if (error) { errEl.textContent = error.message; document.getElementById('reset-submit').disabled = false; document.getElementById('reset-submit').textContent = 'Send Reset Link'; return }
@@ -442,10 +501,10 @@
         if (!pass || pass.length < 6) { errEl.textContent = 'Password must be at least 6 characters'; return }
         document.getElementById('reset-confirm').disabled = true
         document.getElementById('reset-confirm').textContent = 'Updating...'
-        const { error } = await supabase.auth.updateUser({ password: pass })
+        const { error } = await supa.auth.updateUser({ password: pass })
         if (error) { errEl.textContent = error.message; document.getElementById('reset-confirm').disabled = false; document.getElementById('reset-confirm').textContent = 'Update Password'; return }
         sucEl.textContent = 'Password updated! Redirecting...'
-        await supabase.auth.signOut()
+        await supa.auth.signOut()
         setTimeout(function() { navigate('/login') }, 1500)
       }
     }
@@ -488,11 +547,11 @@
         </div>`
 
       // Fetch profile
-      const { data: prof, error } = await supabase.from('profiles').select('*').eq('id', currentUser.id).single()
+      const { data: prof, error } = await supa.from('profiles').select('*').eq('id', currentUser.id).single()
       if (error) {
         // Create if not exists
         const username = currentUser.email.split('@')[0].replace(/[^a-z0-9_]/g, '').slice(0, 20)
-        const { data: newProf, error: insErr } = await supabase.from('profiles').insert({
+        const { data: newProf, error: insErr } = await supa.from('profiles').insert({
           id: currentUser.id, username: username.toLowerCase(),
           page_data: getDefaultData()
         }).select().single()
@@ -511,7 +570,7 @@
 
     async function saveDashData() {
       if (!userProfile) return
-      const { error } = await supabase.from('profiles').update({ page_data: dashData }).eq('id', currentUser.id)
+      const { error } = await supa.from('profiles').update({ page_data: dashData }).eq('id', currentUser.id)
       if (error) console.error('Save error:', error)
     }
 
@@ -715,7 +774,7 @@
 
     // Sign out
     window.signOut = async function() {
-      await supabase.auth.signOut()
+      await supa.auth.signOut()
       currentUser = null; userProfile = null
       navigate('/login')
     }
@@ -725,7 +784,7 @@
       const root = document.getElementById('root')
       root.innerHTML = '<div class="page-loading"><div class="spinner"></div><p>Loading page...</p></div>'
 
-      const { data: prof, error } = await supabase.from('profiles').select('*').eq('username', username).maybeSingle()
+      const { data: prof, error } = await supa.from('profiles').select('*').eq('username', username).maybeSingle()
       if (error || !prof) {
         root.innerHTML =
           '<div id="bg-overlay" style="position:fixed;inset:0;z-index:0;background:linear-gradient(135deg,var(--accent-1),var(--accent-2))"></div>'
