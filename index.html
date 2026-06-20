@@ -219,7 +219,7 @@
       supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
     } catch(e) {
       document.getElementById('root').innerHTML = '<div style="padding:40px;color:#f87171;text-align:center;font-family:sans-serif"><h2>Connection Error</h2><p style="margin-top:12px;font-size:14px">'+e.message.replace(/</g,'&lt;')+'</p><p style="margin-top:8px;font-size:12px;color:var(--text-secondary)">Try: disable ad blocker, use Chrome/Firefox, or check internet</p></div>'
-      throw e
+      return
     }
 
     // ========== App State ==========
@@ -241,6 +241,15 @@
       document.getElementById('root').innerHTML = '<div style="padding:40px;color:#f87171;text-align:center;font-family:sans-serif"><h2>Something went wrong</h2><p style="margin-top:12px;font-size:14px">'+esc(msg)+'</p></div>'
     }
 
+    async function getUserWithTimeout(timeoutMs) {
+      return Promise.race([
+        supabase.auth.getUser(),
+        new Promise(function(_, reject) {
+          setTimeout(function() { reject(new Error('Auth check timed out')) }, timeoutMs)
+        })
+      ])
+    }
+
     async function route() {
       try {
         const hash = getHash()
@@ -251,7 +260,9 @@
           var at = p.get('access_token')
           var rt = p.get('refresh_token')
           if (at) await supabase.auth.setSession({ access_token: at, refresh_token: rt })
-          const { data: { user } } = await supabase.auth.getUser()
+          var authRes
+          try { authRes = await getUserWithTimeout(5000) } catch(e) { authRes = { data: { user: null } } }
+          var user = authRes.data.user
           currentUser = user
           if (hash.includes('type=recovery') && user) {
             renderResetPassword()
@@ -262,7 +273,9 @@
           return
         }
 
-        const { data: { user } } = await supabase.auth.getUser()
+        var authRes
+        try { authRes = await getUserWithTimeout(5000) } catch(e) { authRes = { data: { user: null } } }
+        var user = authRes.data.user
         currentUser = user
 
         if (hash.startsWith('/u/')) {
