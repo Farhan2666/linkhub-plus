@@ -295,8 +295,8 @@
         }
       },
       from: function(table) {
-        var q = { filters: [], method: 'GET', body: null, singleMode: false, maybeMode: false }
-        function exec() {
+        var q = { filters: [], method: 'GET', body: null, hasTerminal: false }
+        function execRaw() {
           var url = SUPABASE_URL + '/rest/v1/' + table
           if (q.filters.length) url += '?' + q.filters.join('&')
           var headers = { 'apikey': SUPABASE_ANON_KEY, 'Content-Type': 'application/json' }
@@ -314,14 +314,19 @@
               })
             })
         }
-        return {
-          select: function() { q.method = 'GET'; return this },
-          insert: function(v) { q.method = 'POST'; q.body = v; return this },
-          update: function(v) { q.method = 'PATCH'; q.body = v; return this },
-          eq: function(col, val) { q.filters.push(col + '=eq.' + encodeURIComponent(val)); return this },
-          single: function() { q.singleMode = true; return exec().then(function(d) { return { data: d || null, error: null } }).catch(function(e) { return { data: null, error: e } }) },
-          maybeSingle: function() { q.maybeMode = true; return exec().then(function(d) { return { data: Array.isArray(d) ? d[0] || null : d || null, error: null } }).catch(function(e) { return { data: null, error: e } }) }
+        var api = {
+          select: function() { q.method = 'GET'; return api },
+          insert: function(v) { q.method = 'POST'; q.body = v; return api },
+          update: function(v) { q.method = 'PATCH'; q.body = v; return api },
+          eq: function(col, val) { q.filters.push(col + '=eq.' + encodeURIComponent(val)); return api },
+          single: function() { q.hasTerminal = true; return execRaw().then(function(d) { return { data: d || null, error: null } }).catch(function(e) { return { data: null, error: e } }) },
+          maybeSingle: function() { q.hasTerminal = true; return execRaw().then(function(d) { return { data: Array.isArray(d) ? d[0] || null : d || null, error: null } }).catch(function(e) { return { data: null, error: e } }) },
+          then: function(resolve, reject) {
+            if (q.hasTerminal) return
+            return execRaw().then(function(d) { resolve({ data: d, error: null }) }, function(e) { resolve({ data: null, error: e }) })
+          }
         }
+        return api
       }
     }
 
@@ -583,12 +588,13 @@
       if (!prof) {
         // Create if not exists
         const username = currentUser.email.split('@')[0].replace(/[^a-z0-9_]/g, '').slice(0, 20)
-        const { data: newProf, error: insErr } = await supa.from('profiles').insert({
+        const { error: insErr } = await supa.from('profiles').insert({
           id: currentUser.id, username: username.toLowerCase(),
           page_data: getDefaultData()
-        }).select().single()
-        if (insErr) { root.innerHTML = `<p style="padding:40px;color:#f87171">Error: ${insErr.message}</p>`; return }
-        userProfile = newProf
+        })
+        if (insErr && !insErr.message.includes('duplicate')) { root.innerHTML = `<p style="padding:40px;color:#f87171">Error: ${insErr.message}</p>`; return }
+        const { data: newProf } = await supa.from('profiles').select('*').eq('id', currentUser.id).maybeSingle()
+        userProfile = newProf || prof
       } else {
         userProfile = prof
       }
